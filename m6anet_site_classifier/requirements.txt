@@ -1,6 +1,0 @@
-numpy>=1.26
-pandas>=2.1
-ijson>=3.2
-scikit-learn>=1.4
-torch>=2.2
-joblib>=1.3

@@ -1,0 +1,17 @@
+[project]
+name = "dsa4262-m6anet"
+version = "0.1.0"
+description = "m6Anet-inspired multiple-instance m6A site classifier for DSA4262"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "ijson>=3.2",
+    "scikit-learn>=1.4",
+    "torch>=2.2",
+    "joblib>=1.3",
+]
+
+[tool.uv]
+package = false

@@ -1,4 +1,3 @@
-import gzip
 import json
 from pathlib import Path
 
@@ -6,17 +5,16 @@ import ijson
 import numpy as np
 import pandas as pd
 
-
 DATA_FILES = {
-    0: ("dataset0.json.gz", "data.info.labelled"),
-    1: ("dataset1.json.gz", "data1.info"),
-    2: ("dataset2.json.gz", "data2.info"),
+    0: ("data0/dataset0.json", "data0/data.info.labelled"),
+    1: ("data1/dataset1.json", "data1/data.info"),
+    2: ("data2/dataset2.json", "data2/data.info"),
 }
 
 
 def iter_feature_sites(feature_path: Path):
-    """Stream top-level transcript objects from the compressed feature JSON."""
-    with gzip.open(feature_path, "rb") as stream:
+    """Stream top-level transcript objects from the feature JSON."""
+    with feature_path.open("rb") as stream:
         records = ijson.kvitems(
             stream,
             "",
@@ -52,7 +50,7 @@ def prepare_one(
         "metadata_size": metadata_path.stat().st_size,
         "metadata_mtime_ns": metadata_path.stat().st_mtime_ns,
         "n_features": 9,
-        "cache_version": 3,
+        "cache_version": 4,
     }
     if manifest_path.exists() and sites_path.exists() and reads_path.exists():
         if json.loads(manifest_path.read_text(encoding="utf-8")) == signature:
@@ -75,8 +73,7 @@ def prepare_one(
     if binary_labels and not sites["label"].isin([0, 1]).all():
         raise ValueError(f"Dataset {dataset_number} training labels must be binary")
     if not binary_labels and (
-        not np.isfinite(sites["label"]).all()
-        or not sites["label"].between(0, 1).all()
+        not np.isfinite(sites["label"]).all() or not sites["label"].between(0, 1).all()
     ):
         raise ValueError(f"Dataset {dataset_number} labels must be in [0, 1]")
     if sites.duplicated(["transcript_id", "transcript_position"]).any():
@@ -153,7 +150,7 @@ def prepare_one(
                 f"JSON={len(values)}"
             )
         start = int(sites.at[row_index, "read_start"])
-        read_map[start:start + expected_reads] = values
+        read_map[start : start + expected_reads] = values
         sites.at[row_index, "sequence"] = sequence.upper()
         seen[row_index] = True
         processed += 1

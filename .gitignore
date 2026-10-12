@@ -1,0 +1,12 @@
+# macOS and Python
+.DS_Store
+**/__pycache__/
+*.py[cod]
+
+# Local environment and generated training artifacts
+/.venv/
+/runs/
+/cache/
+
+# Provided datasets and extracted feature JSON files
+/data/

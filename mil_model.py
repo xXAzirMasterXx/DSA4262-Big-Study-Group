@@ -3,7 +3,6 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset
 
-
 BASE_TO_INT = {"A": 0, "C": 1, "G": 2, "T": 3}
 UNKNOWN_KMER = 1024
 
@@ -33,7 +32,7 @@ class SiteBagDataset(Dataset):
         dataset_number = int(row["dataset"])
         read_start = int(row["read_start"])
         available = int(row["n_reads"])
-        reads = self.read_maps[dataset_number][read_start:read_start + available]
+        reads = self.read_maps[dataset_number][read_start : read_start + available]
         replace = available < self.n_reads_per_site
         selected = np.random.choice(
             available,
@@ -44,7 +43,7 @@ class SiteBagDataset(Dataset):
         sampled_reads = (sampled_reads - self.feature_mean) / self.feature_std
 
         sequence = str(row["sequence"]).upper()
-        kmers = [sequence[offset:offset + 5] for offset in range(3)]
+        kmers = [sequence[offset : offset + 5] for offset in range(3)]
         kmer_ids = np.asarray([encode_5mer(kmer) for kmer in kmers], dtype=np.int64)
 
         return (

@@ -26,9 +26,7 @@ def set_seed(seed):
 def open_read_maps(prepared, sites):
     read_maps = {}
     for dataset_number, (_, reads_path) in prepared.items():
-        n_reads = int(
-            sites.loc[sites["dataset"] == dataset_number, "n_reads"].sum()
-        )
+        n_reads = int(sites.loc[sites["dataset"] == dataset_number, "n_reads"].sum())
         read_maps[dataset_number] = np.memmap(
             reads_path,
             dtype=np.float32,
@@ -44,7 +42,7 @@ def feature_statistics(train_sites, read_maps):
     sums_sq = np.zeros(9, dtype=np.float64)
     for row in train_sites.itertuples(index=False):
         reads = read_maps[int(row.dataset)][
-            int(row.read_start):int(row.read_start) + int(row.n_reads)
+            int(row.read_start) : int(row.read_start) + int(row.n_reads)
         ]
         values = np.asarray(reads, dtype=np.float64)
         sums += values.sum(axis=0)
@@ -55,7 +53,9 @@ def feature_statistics(train_sites, read_maps):
     return mean.astype(np.float32), np.sqrt(variance).astype(np.float32)
 
 
-def make_loader(sites, read_maps, n_reads, mean, std, batch_size, shuffle, balanced=False):
+def make_loader(
+    sites, read_maps, n_reads, mean, std, batch_size, shuffle, balanced=False
+):
     dataset = SiteBagDataset(sites, read_maps, n_reads, mean, std)
     if balanced:
         labels = sites["label"].to_numpy(dtype=int)
@@ -78,10 +78,14 @@ def score_dataset(model, loader, n_sites, device, iterations=1):
     with torch.no_grad():
         for _ in range(iterations):
             for indices, reads, kmers, _labels in loader:
-                probabilities = model(
-                    reads.to(device),
-                    kmers.to(device),
-                ).cpu().numpy()
+                probabilities = (
+                    model(
+                        reads.to(device),
+                        kmers.to(device),
+                    )
+                    .cpu()
+                    .numpy()
+                )
                 scores[indices.numpy()] += probabilities
     return scores / iterations
 
@@ -133,7 +137,9 @@ def train_baseline_model(
         epoch_start = time.perf_counter()
         running_loss = 0.0
         processed_sites = 0
-        for batch_number, (_indices, reads, kmers, labels) in enumerate(loader, start=1):
+        for batch_number, (_indices, reads, kmers, labels) in enumerate(
+            loader, start=1
+        ):
             optimizer.zero_grad(set_to_none=True)
             predictions = model(reads.to(device), kmers.to(device))
             loss = criterion(predictions, labels.to(device))
@@ -143,7 +149,10 @@ def train_baseline_model(
             running_loss += float(loss.detach().cpu()) * batch_sites
             processed_sites += batch_sites
 
-            if batch_number % log_every_batches == 0 or batch_number == batches_per_epoch:
+            if (
+                batch_number % log_every_batches == 0
+                or batch_number == batches_per_epoch
+            ):
                 elapsed = time.perf_counter() - epoch_start
                 print(
                     f"Epoch {epoch + 1}/{params['epochs']} | "
@@ -163,7 +172,9 @@ def train_baseline_model(
     return model
 
 
-def evaluate(model, sites, read_maps, n_reads, mean, std, batch_size, device, iterations):
+def evaluate(
+    model, sites, read_maps, n_reads, mean, std, batch_size, device, iterations
+):
     _dataset, loader = make_loader(
         sites,
         read_maps,
@@ -221,7 +232,9 @@ def main():
     )
     train_sites["label"] = train_sites["label"].astype(int)
     if train_sites["label"].nunique() != 2:
-        raise ValueError("Training data from datasets 0 and 1 must contain both classes")
+        raise ValueError(
+            "Training data from datasets 0 and 1 must contain both classes"
+        )
     training_prevalence = float(train_sites["label"].mean())
     print(
         f"Training sites: {len(train_sites):,}; "
@@ -238,7 +251,9 @@ def main():
     else:
         device = torch.device(args.device)
     if device.type == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("CUDA was requested but is not available in this PyTorch install")
+        raise RuntimeError(
+            "CUDA was requested but is not available in this PyTorch install"
+        )
     print("Training device:", device)
 
     train_mean, train_std = feature_statistics(train_sites, read_maps)

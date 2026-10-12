@@ -12,27 +12,41 @@ transcript_id,transcript_position,score
 
 Scores for datasets 0 and 1 are in-sample predictions because those sites were used to train the model. Dataset 2 was excluded from fitting and is the unseen dataset. The output intentionally has no dataset column, as requested; if the same transcript and position occurs in more than one input dataset, each dataset's row is kept.
 
-Dataset 0's `data.info.labelled` has no `n_reads` column. On the first run, the project counts reads from `dataset0.json.gz` before building the feature cache, requiring an extra pass over that compressed file. Later runs reuse the cache unless the source files change.
+Dataset 0's `data.info.labelled` has no `n_reads` column. On the first run, the project counts reads from `data/data0/dataset0.json` before building the feature cache, requiring an extra pass over that JSON file. Later runs reuse the cache unless the source files change.
 
 ## Setup
 
-Use Python 3.10–3.12. In PowerShell, from this project folder:
+Run these commands from the repository root. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if it is not already available.
 
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```bash
+uv sync --locked
 ```
 
-If PowerShell blocks environment activation, call the venv's Python executable directly as shown. If Windows blocks PyTorch or another compiled dependency with an Application Control/Code Integrity message, use WSL or an Ubuntu virtual machine; reinstalling does not override that policy.
+The project pins Python 3.12 in `.python-version`. Dependencies are declared in `pyproject.toml`, and `uv.lock` records the resolved versions. uv creates the root `.venv`; environment activation is optional when using `uv run`.
+
+The supplied data belong in the root `data/` directory:
+
+```text
+data/
+  data0/dataset0.json
+  data0/data.info.labelled
+  data1/dataset1.json
+  data1/data.info
+  data2/dataset2.json
+  data2/data.info
+```
+
+The loader reads the decompressed JSON files. Data, virtual environments, caches, and runs are ignored by Git; commit `pyproject.toml`, `.python-version`, and `uv.lock`.
+
+To add or remove a dependency, use `uv add PACKAGE` or `uv remove PACKAGE`. Use `uv lock --upgrade` followed by `uv sync --locked` for an intentional dependency upgrade.
 
 ## Run
 
-```powershell
-.\.venv\Scripts\python.exe train.py `
-  --data-dir "C:\Users\ranie\Downloads\Team_Project_export" `
-  --output-dir "runs\m6anet_baseline"
+```bash
+uv run --locked python train.py --data-dir ./data --output-dir ./runs/m6anet_baseline --device cpu
 ```
+
+On macOS the current trainer uses CPU. On a machine with a supported NVIDIA GPU, use `--device cuda` or `--device auto`. The current CLI does not support Apple's MPS backend.
 
 The defaults train for 10 epochs with 20 reads per site and batch size 256. Training prints batch progress every 100 batches and an epoch-complete summary. Change that interval with `--log-every-batches` (for example, `--log-every-batches 25`). You can also adjust `--n-reads-per-site`, `--epochs`, `--batch-size`, and `--eval-iterations`. Evaluation iterations average predictions over repeated random read bags for each site; this still trains only one model. Set `--device cuda` if a supported NVIDIA GPU and CUDA-enabled PyTorch are available; otherwise device selection is automatic.
 
