@@ -69,7 +69,7 @@ class M6ANetInspiredMIL(nn.Module):
         )
         self.read_probability = nn.Linear(32, 1)
 
-    def forward(self, read_features, kmer_ids):
+    def read_probabilities(self, read_features, kmer_ids):
         batch_size, n_reads, _ = read_features.shape
         kmer_embeddings = self.kmer_embedding(kmer_ids).reshape(batch_size, -1)
         kmer_embeddings = kmer_embeddings.unsqueeze(1).expand(-1, n_reads, -1)
@@ -77,10 +77,14 @@ class M6ANetInspiredMIL(nn.Module):
         read_inputs = read_inputs.reshape(batch_size * n_reads, -1)
         hidden = self.encoder(read_inputs)
         read_probabilities = torch.sigmoid(self.read_probability(hidden))
-        read_probabilities = read_probabilities.reshape(batch_size, n_reads)
+        return read_probabilities.reshape(batch_size, n_reads)
 
-        # m6Anet-style noisy-OR: probability that at least one sampled read is modified.
-        stable_log_unmodified = torch.log1p(
-            -read_probabilities.clamp(max=1.0 - 1e-7)
-        ).sum(dim=1)
-        return -torch.expm1(stable_log_unmodified)
+    def forward(self, read_features, kmer_ids):
+        return noisy_or(self.read_probabilities(read_features, kmer_ids))
+
+
+def noisy_or(read_probabilities):
+    """Stable probability that at least one read in a bag is modified."""
+    return -torch.expm1(
+        torch.log1p(-read_probabilities.clamp(max=1.0 - 1e-7)).sum(dim=-1)
+    )

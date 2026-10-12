@@ -4,6 +4,7 @@ from pathlib import Path
 import ijson
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import StratifiedGroupKFold
 
 DATA_FILES = {
     0: ("data0/dataset0.json", "data0/data.info.labelled"),
@@ -68,14 +69,16 @@ def prepare_one(
     ).astype(int)
     if has_read_counts:
         sites["n_reads"] = pd.to_numeric(sites["n_reads"], errors="raise").astype(int)
-    label_dtype = int if binary_labels else float
-    sites["label"] = pd.to_numeric(sites["label"], errors="raise").astype(label_dtype)
+    # Validate before casting: converting a fractional target to int first
+    # could silently turn an invalid binary label into zero.
+    sites["label"] = pd.to_numeric(sites["label"], errors="raise")
     if binary_labels and not sites["label"].isin([0, 1]).all():
         raise ValueError(f"Dataset {dataset_number} training labels must be binary")
     if not binary_labels and (
         not np.isfinite(sites["label"]).all() or not sites["label"].between(0, 1).all()
     ):
         raise ValueError(f"Dataset {dataset_number} labels must be in [0, 1]")
+    sites["label"] = sites["label"].astype(int if binary_labels else float)
     if sites.duplicated(["transcript_id", "transcript_position"]).any():
         raise ValueError(f"Duplicate site keys in {metadata_path}")
     if has_read_counts and (sites["n_reads"] <= 0).any():
@@ -183,3 +186,24 @@ def prepare_datasets(data_dir: Path, cache_dir: Path, dataset_numbers=(0, 1)):
             binary_labels=dataset_number in (0, 1),
         )
     return prepared
+
+
+def split_sites(sites, seed=42, ratios=(0.7, 0.15, 0.15)):
+    """Stratify one dataset by label, keeping each transcript in one partition."""
+    sites = sites.copy().reset_index(drop=True)
+    folds = min(20, sites["transcript_id"].nunique())
+    if folds < 3:
+        raise ValueError("At least three transcripts are required for train/val/test")
+    train_end = int(np.clip(round(folds * ratios[0]), 1, folds - 2))
+    val_end = int(
+        np.clip(round(folds * (ratios[0] + ratios[1])), train_end + 1, folds - 1)
+    )
+    splitter = StratifiedGroupKFold(n_splits=folds, shuffle=True, random_state=seed)
+    for fold, (_, indices) in enumerate(
+        splitter.split(sites, sites["label"], sites["transcript_id"])
+    ):
+        name = "train" if fold < train_end else "val" if fold < val_end else "test"
+        sites.loc[indices, "split"] = name
+    if sites.groupby("transcript_id")["split"].nunique().gt(1).any():
+        raise AssertionError("Transcript appears in multiple partitions")
+    return sites

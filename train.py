@@ -4,6 +4,7 @@ import json
 import random
 import time
 from pathlib import Path
+from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 
 import numpy as np
 import pandas as pd
@@ -11,8 +12,10 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from data_prep import prepare_datasets
-from mil_model import M6ANetInspiredMIL, SiteBagDataset
+from data_prep import DATA_FILES, prepare_datasets, split_sites
+from mil_model import M6ANetInspiredMIL, SiteBagDataset, encode_5mer, noisy_or
+
+SPLITS = ("train", "val", "test")
 
 
 def set_seed(seed):
@@ -90,22 +93,115 @@ def score_dataset(model, loader, n_sites, device, iterations=1):
     return scores / iterations
 
 
-def correct_balanced_prior(scores, natural_prevalence):
-    """Undo the 50/50 sampler prior using the labeled training prevalence."""
-    clipped = np.clip(np.asarray(scores, dtype=np.float64), 1e-7, 1.0 - 1e-7)
-    balanced_odds = clipped / (1.0 - clipped)
-    natural_odds = balanced_odds * natural_prevalence / (1.0 - natural_prevalence)
-    return natural_odds / (1.0 + natural_odds)
+def compute_metrics(labels, scores):
+    """Binary BCE, trapezoidal PR AUC (as in m6Anet), and ROC AUC."""
+    labels = np.asarray(labels, dtype=np.float64)
+    scores = np.asarray(scores, dtype=np.float64)
+    if not len(labels) or labels.shape != scores.shape:
+        raise ValueError("Metrics require nonempty, equally sized labels and scores")
+    if not np.isfinite(labels).all() or not np.isfinite(scores).all():
+        raise ValueError("Metrics require finite targets and probabilities")
+    if not np.isin(labels, [0, 1]).all() or not ((scores >= 0) & (scores <= 1)).all():
+        raise ValueError("Classification targets must be binary and scores in [0, 1]")
+    clipped = np.clip(scores, 1e-7, 1 - 1e-7)
+    binary = (labels > 0).astype(int)
+    metrics = {
+        "loss": float(
+            -(labels * np.log(clipped) + (1 - labels) * np.log1p(-clipped)).mean()
+        ),
+        "pr_auc": None,
+        "roc_auc": None,
+        "sites": int(len(labels)),
+        "auc_positive_sites": int(binary.sum()),
+        "auc_target": "label > 0",
+        "auc_unavailable_reason": None,
+    }
+    if np.unique(binary).size < 2:
+        metrics["auc_unavailable_reason"] = (
+            "Only one binary target class is present in this split"
+        )
+    else:
+        precision, recall, _ = precision_recall_curve(binary, scores)
+        metrics["pr_auc"] = float(auc(recall, precision))
+        metrics["roc_auc"] = float(roc_auc_score(binary, scores))
+    return metrics
+
+
+def evaluate(
+    model, sites, read_maps, n_reads, mean, std, batch_size, device, iterations, seed=42
+):
+    # Use the same evaluation bags each epoch without changing training RNGs.
+    numpy_state, torch_state = np.random.get_state(), torch.random.get_rng_state()
+    cuda_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    try:
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        _, loader = make_loader(
+            sites, read_maps, n_reads, mean, std, batch_size, shuffle=False
+        )
+        return score_dataset(model, loader, len(sites), device, iterations)
+    finally:
+        np.random.set_state(numpy_state)
+        torch.random.set_rng_state(torch_state)
+        if cuda_state is not None:
+            torch.cuda.set_rng_state_all(cuda_state)
+
+
+def evaluate_partition(
+    model, sites, read_maps, mean, std, params, device, iterations, seed
+):
+    sites = sites.reset_index(drop=True)
+    scores = evaluate(
+        model,
+        sites,
+        read_maps,
+        params["n_reads_per_site"],
+        mean,
+        std,
+        params["batch_size"],
+        device,
+        iterations,
+        seed,
+    )
+    metrics = {
+        "pooled": compute_metrics(sites["label"].to_numpy(), scores),
+        "datasets": {},
+    }
+    for number in sorted(sites["dataset"].unique()):
+        mask = sites["dataset"].to_numpy() == number
+        metrics["datasets"][str(number)] = compute_metrics(
+            sites.loc[mask, "label"].to_numpy(), scores[mask]
+        )
+    return scores, metrics
+
+
+def print_metrics(prefix, metrics):
+    for name, values in [
+        ("pooled", metrics["pooled"]),
+        *[(f"data{n}", m) for n, m in metrics["datasets"].items()],
+    ]:
+
+        def display(value):
+            return "N/A (single target class)" if value is None else f"{value:.6f}"
+
+        print(
+            f"{prefix} {name}: loss={values['loss']:.6f} | "
+            f"PR AUC={display(values['pr_auc'])} | ROC AUC={display(values['roc_auc'])}",
+            flush=True,
+        )
 
 
 def train_baseline_model(
-    sites,
+    partitions,
     read_maps,
     mean,
     std,
     params,
     device,
     seed,
+    output_dir,
+    iterations,
+    selection_metric,
     log_every_batches=100,
 ):
     set_seed(seed)
@@ -119,146 +215,299 @@ def train_baseline_model(
         lr=params["learning_rate"],
         weight_decay=params["weight_decay"],
     )
-    dataset, loader = make_loader(
-        sites,
+    _, loader = make_loader(
+        partitions["train"],
         read_maps,
         params["n_reads_per_site"],
         mean,
         std,
         params["batch_size"],
         shuffle=False,
-        balanced=True,
+        balanced=params["balanced"],
     )
     criterion = nn.BCELoss()
-    batches_per_epoch = len(loader)
-
-    for epoch in range(params["epochs"]):
+    best_value, best_state, best_epoch = None, None, None
+    history = []
+    for epoch in range(1, params["epochs"] + 1):
         model.train()
         epoch_start = time.perf_counter()
-        running_loss = 0.0
-        processed_sites = 0
-        for batch_number, (_indices, reads, kmers, labels) in enumerate(
-            loader, start=1
-        ):
+        loss_sum, processed = 0.0, 0
+        for batch_number, (_, reads, kmers, labels) in enumerate(loader, start=1):
             optimizer.zero_grad(set_to_none=True)
             predictions = model(reads.to(device), kmers.to(device))
-            loss = criterion(predictions, labels.to(device))
+            loss = criterion(predictions.clamp(1e-7, 1 - 1e-7), labels.to(device))
+            if not torch.isfinite(loss):
+                raise RuntimeError("Nonfinite training loss")
             loss.backward()
             optimizer.step()
-            batch_sites = len(labels)
-            running_loss += float(loss.detach().cpu()) * batch_sites
-            processed_sites += batch_sites
-
-            if (
-                batch_number % log_every_batches == 0
-                or batch_number == batches_per_epoch
-            ):
-                elapsed = time.perf_counter() - epoch_start
+            loss_sum += float(loss.detach().cpu()) * len(labels)
+            processed += len(labels)
+            if batch_number % log_every_batches == 0 or batch_number == len(loader):
                 print(
-                    f"Epoch {epoch + 1}/{params['epochs']} | "
-                    f"batch {batch_number}/{batches_per_epoch} | "
-                    f"mean loss={running_loss / max(processed_sites, 1):.4f} | "
-                    f"elapsed={elapsed:.1f}s",
+                    f"Epoch {epoch}/{params['epochs']} | batch {batch_number}/{len(loader)} | "
+                    f"sampled training BCE={loss_sum / processed:.6f}",
                     flush=True,
                 )
-
-        epoch_elapsed = time.perf_counter() - epoch_start
-        print(
-            f"Completed epoch {epoch + 1}/{params['epochs']} | "
-            f"mean balanced site BCE={running_loss / max(processed_sites, 1):.4f} | "
-            f"time={epoch_elapsed:.1f}s",
-            flush=True,
+        # Natural, unweighted site distributions are used for all reported metrics.
+        epoch_metrics = {}
+        for name in ("train", "val"):
+            _, metrics = evaluate_partition(
+                model,
+                partitions[name],
+                read_maps,
+                mean,
+                std,
+                params,
+                device,
+                iterations,
+                seed + SPLITS.index(name),
+            )
+            epoch_metrics[name] = metrics
+            print_metrics(f"Epoch {epoch} {name}", metrics)
+        value = epoch_metrics["val"]["pooled"][selection_metric]
+        if value is None:
+            raise ValueError(
+                f"Validation {selection_metric} is undefined; use --selection-metric loss"
+            )
+        improved = best_value is None or (
+            value < best_value if selection_metric == "loss" else value > best_value
         )
-    return model
+        if improved:
+            best_value, best_epoch = value, epoch
+            best_state = {
+                key: tensor.detach().cpu().clone()
+                for key, tensor in model.state_dict().items()
+            }
+            torch.save(
+                {
+                    "model_state_dict": best_state,
+                    "baseline_parameters": params,
+                    "feature_mean": torch.from_numpy(mean),
+                    "feature_std": torch.from_numpy(std),
+                    "best_epoch": best_epoch,
+                    "selection_metric": selection_metric,
+                    "validation_value": best_value,
+                    "auc_target": "label > 0",
+                    "prior_correction": False,
+                },
+                output_dir / "best_model.pt",
+            )
+        history.append(
+            {
+                "epoch": epoch,
+                "sampled_training_loss": loss_sum / processed,
+                "elapsed_seconds": time.perf_counter() - epoch_start,
+                "selected_as_best": improved,
+                **epoch_metrics,
+            }
+        )
+        (output_dir / "history.json").write_text(
+            json.dumps(history, indent=2, allow_nan=False)
+        )
+    save_curves(history, output_dir, best_epoch)
+    model.load_state_dict(best_state)
+    return model, best_epoch, best_value
 
 
-def evaluate(
-    model, sites, read_maps, n_reads, mean, std, batch_size, device, iterations
-):
-    _dataset, loader = make_loader(
-        sites,
-        read_maps,
-        n_reads,
-        mean,
-        std,
-        batch_size,
-        shuffle=False,
+def save_curves(history, output_dir, best_epoch):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    rows = [
+        {"epoch": epoch["epoch"], "split": split, "dataset": dataset, **metrics}
+        for epoch in history
+        for split in ("train", "val")
+        for dataset, metrics in [
+            ("pooled", epoch[split]["pooled"]),
+            *epoch[split]["datasets"].items(),
+        ]
+    ]
+    table = pd.DataFrame(rows)
+    table.to_csv(output_dir / "history.csv", index=False)
+    datasets = table["dataset"].unique()
+    fig, axes = plt.subplots(
+        len(datasets), 3, figsize=(12, 3 * len(datasets)), squeeze=False
     )
-    return score_dataset(model, loader, len(sites), device, iterations)
+    for row, dataset in enumerate(datasets):
+        for col, metric in enumerate(("loss", "pr_auc", "roc_auc")):
+            ax = axes[row, col]
+            for split in ("train", "val"):
+                values = table[
+                    (table["dataset"] == dataset) & (table["split"] == split)
+                ]
+                ax.plot(values["epoch"], values[metric], marker="o", label=split)
+            ax.axvline(best_epoch, color="gray", linestyle=":", label="selected epoch")
+            ax.set(
+                title=f"{dataset if dataset == 'pooled' else 'data' + str(dataset)}: {metric}",
+                xlabel="Epoch",
+            )
+            ax.xaxis.get_major_locator().set_params(integer=True)
+            if metric != "loss":
+                ax.set_ylim(0, 1.02)
+            ax.grid(alpha=0.2)
+            ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_dir / "training_curves.png", dpi=160)
+    fig.savefig(output_dir / "training_curves.pdf")
+    plt.close(fig)
+
+
+def evaluate_data2(
+    model, sites, read_maps, mean, std, params, device, iterations, seed
+):
+    """Predict every read once; pool fixed-size bags and the complete read set."""
+    rng = np.random.default_rng(seed)
+    bag_scores, fraction_scores = [], []
+    chunk_size = params["batch_size"] * params["n_reads_per_site"]
+    model.eval()
+    with torch.no_grad():
+        for row in sites.itertuples(index=False):
+            reads = read_maps[2][row.read_start : row.read_start + row.n_reads]
+            kmers = torch.tensor(
+                [[encode_5mer(row.sequence[i : i + 5]) for i in range(3)]],
+                device=device,
+            )
+            probabilities = []
+            for start in range(0, len(reads), chunk_size):
+                values = (np.asarray(reads[start : start + chunk_size]) - mean) / std
+                features = (
+                    torch.from_numpy(np.ascontiguousarray(values))
+                    .unsqueeze(0)
+                    .to(device)
+                )
+                probabilities.append(
+                    model.read_probabilities(features, kmers).cpu().numpy().ravel()
+                )
+            probabilities = np.concatenate(probabilities)
+            bags = np.stack(
+                [
+                    rng.choice(
+                        probabilities,
+                        params["n_reads_per_site"],
+                        replace=len(probabilities) < params["n_reads_per_site"],
+                    )
+                    for _ in range(iterations)
+                ]
+            )
+            bag_scores.append(float(noisy_or(torch.from_numpy(bags)).mean()))
+            fraction_scores.append(float(probabilities.mean()))
+    bag_scores, fraction_scores = np.asarray(bag_scores), np.asarray(fraction_scores)
+    errors = fraction_scores - sites["label"].to_numpy(dtype=float)
+    metrics = {
+        "noisy_or": compute_metrics((sites["label"] > 0).astype(int), bag_scores),
+        "mean": {
+            "mae": float(np.abs(errors).mean()),
+            "rmse": float(np.sqrt(np.square(errors).mean())),
+            "sites": len(sites),
+        },
+    }
+    return bag_scores, fraction_scores, metrics
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Train an m6Anet-inspired multiple-instance m6A site classifier."
+        description="Train on grouped data0/data1 splits; evaluate all data2 with two pooling methods."
     )
     parser.add_argument("--data-dir", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, default=Path("runs/m6anet_baseline"))
+    parser.add_argument(
+        "--output-dir", type=Path, default=Path("runs/grouped_baseline")
+    )
     parser.add_argument("--cache-dir", type=Path, default=None)
+    parser.add_argument(
+        "--split-ratios", type=float, nargs=3, default=[0.7, 0.15, 0.15]
+    )
+    parser.add_argument("--split-only", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--n-reads-per-site", type=int, default=20)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--eval-iterations", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--log-every-batches", type=int, default=100)
-    parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
+    parser.add_argument(
+        "--selection-metric", choices=("loss", "pr_auc", "roc_auc"), default="pr_auc"
+    )
+    parser.add_argument("--no-balanced-sampler", action="store_true")
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     args = parser.parse_args()
-    if args.log_every_batches < 1:
-        parser.error("--log-every-batches must be at least 1")
-
-    if args.cache_dir is None:
-        args.cache_dir = args.output_dir / "cache"
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    args.cache_dir.mkdir(parents=True, exist_ok=True)
-    set_seed(args.seed)
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-
-    prepared = prepare_datasets(
-        args.data_dir,
-        args.cache_dir,
-        dataset_numbers=(0, 1, 2),
-    )
-    site_tables = {}
-    for dataset_number in (0, 1, 2):
-        sites_path, _reads_path = prepared[dataset_number]
-        sites = pd.read_csv(sites_path, dtype={"transcript_id": str})
-        site_tables[dataset_number] = sites
-        print(f"Dataset {dataset_number}: {len(sites):,} sites")
-
-    # Fit on all labeled sites in datasets 0 and 1. Dataset 2 labels are not
-    # used; it is included only in the final prediction CSV.
-    train_sites = pd.concat(
-        [site_tables[0], site_tables[1]],
-        ignore_index=True,
-    )
-    train_sites["label"] = train_sites["label"].astype(int)
-    if train_sites["label"].nunique() != 2:
-        raise ValueError(
-            "Training data from datasets 0 and 1 must contain both classes"
-        )
-    training_prevalence = float(train_sites["label"].mean())
-    print(
-        f"Training sites: {len(train_sites):,}; "
-        f"positive fraction={train_sites['label'].mean():.4f}"
-    )
-    sites_for_maps = pd.concat(
-        [site_tables[number] for number in (0, 1, 2)],
-        ignore_index=True,
-    )
-    read_maps = open_read_maps(prepared, sites_for_maps)
-
-    if args.device == "auto":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    for name in (
+        "epochs",
+        "eval_iterations",
+        "n_reads_per_site",
+        "batch_size",
+        "log_every_batches",
+    ):
+        if getattr(args, name) < 1:
+            parser.error(f"--{name.replace('_', '-')} must be positive")
+    if np.any(np.asarray(args.split_ratios) <= 0) or not np.isclose(
+        sum(args.split_ratios), 1
+    ):
+        parser.error("Split ratios must be positive and sum to one")
+    run_dir = args.output_dir / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    run_dir.mkdir(parents=True)
+    if args.split_only:
+        tables = {
+            n: pd.read_csv(
+                args.data_dir / DATA_FILES[n][1],
+                dtype={"transcript_id": str},
+            )
+            for n in (0, 1, 2)
+        }
     else:
-        device = torch.device(args.device)
-    if device.type == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError(
-            "CUDA was requested but is not available in this PyTorch install"
+        prepared = prepare_datasets(
+            args.data_dir,
+            args.cache_dir or args.output_dir / "cache",
+            dataset_numbers=(0, 1, 2),
         )
-    print("Training device:", device)
-
-    train_mean, train_std = feature_statistics(train_sites, read_maps)
-    # One fixed, reproducible baseline configuration; no hyperparameter search.
-    baseline_parameters = {
+        tables = {
+            n: pd.read_csv(prepared[n][0], dtype={"transcript_id": str})
+            for n in (0, 1, 2)
+        }
+    for number in (0, 1):
+        tables[number] = split_sites(
+            tables[number], seed=args.seed + number, ratios=args.split_ratios
+        )
+    tables[2]["split"] = "test"
+    summary = {}
+    for number, sites in tables.items():
+        sites["dataset"] = number
+        sites.to_csv(run_dir / f"dataset{number}_splits.csv", index=False)
+        summary[str(number)] = (
+            sites.groupby("split")["label"].agg(["count", "mean"]).to_dict("index")
+        )
+        print(f"data{number} split summary: {summary[str(number)]}", flush=True)
+    run_info = {
+        "seed": args.seed,
+        "split_ratios": args.split_ratios,
+        "split_summary": summary,
+        "trained_on_datasets": [0, 1],
+        "data2_used_for_selection": False,
+        "prior_correction": False,
+        "eval_iterations": args.eval_iterations,
+        "selection_metric": args.selection_metric,
+    }
+    (run_dir / "run_info.json").write_text(json.dumps(run_info, indent=2))
+    if args.split_only:
+        print("Saved split assignments to:", run_dir.resolve())
+        return
+    binary_sites = pd.concat([tables[0], tables[1]], ignore_index=True)
+    partitions = {
+        name: binary_sites[binary_sites["split"] == name].reset_index(drop=True)
+        for name in SPLITS
+    }
+    if args.selection_metric != "loss" and partitions["val"]["label"].nunique() < 2:
+        parser.error("Validation has one binary class; choose --selection-metric loss")
+    read_maps = open_read_maps(prepared, pd.concat(tables.values(), ignore_index=True))
+    device = torch.device(
+        "cuda"
+        if args.device == "auto" and torch.cuda.is_available()
+        else "cpu" if args.device == "auto" else args.device
+    )
+    if device.type == "cuda" and not torch.cuda.is_available():
+        parser.error("CUDA requested but unavailable")
+    mean, std = feature_statistics(partitions["train"], read_maps)
+    params = {
         "n_reads_per_site": args.n_reads_per_site,
         "embed_dim": 2,
         "hidden_dim": 150,
@@ -267,85 +516,100 @@ def main():
         "weight_decay": 1e-5,
         "batch_size": args.batch_size,
         "epochs": args.epochs,
-        "class_balance": "WeightedRandomSampler with replacement",
+        "balanced": not args.no_balanced_sampler,
     }
-    print("\nTraining one baseline model:", baseline_parameters)
-    baseline_model = train_baseline_model(
-        train_sites,
+    model, best_epoch, best_value = train_baseline_model(
+        partitions,
         read_maps,
-        train_mean,
-        train_std,
-        baseline_parameters,
+        mean,
+        std,
+        params,
         device,
         args.seed,
-        log_every_batches=args.log_every_batches,
+        run_dir,
+        args.eval_iterations,
+        args.selection_metric,
+        args.log_every_batches,
     )
-
-    prediction_paths = {}
-    for dataset_number in (0, 1, 2):
-        prediction_sites = site_tables[dataset_number].reset_index(drop=True)
-        set_seed(args.seed + dataset_number + 1)
-        scores = evaluate(
-            baseline_model,
-            prediction_sites,
+    final_metrics, metric_rows = {}, []
+    for name in SPLITS:
+        scores, metrics = evaluate_partition(
+            model,
+            partitions[name],
             read_maps,
-            args.n_reads_per_site,
-            train_mean,
-            train_std,
-            args.batch_size,
+            mean,
+            std,
+            params,
             device,
-            iterations=args.eval_iterations,
+            args.eval_iterations,
+            args.seed + SPLITS.index(name),
         )
-        scores = correct_balanced_prior(scores, training_prevalence)
-        dataset_predictions = prediction_sites[
-            ["transcript_id", "transcript_position"]
+        final_metrics[name] = metrics
+        print_metrics(f"Selected epoch {best_epoch} {name}", metrics)
+        predictions = partitions[name][
+            ["dataset", "transcript_id", "transcript_position", "label", "split"]
         ].copy()
-        dataset_predictions["score"] = scores
-        prediction_path = args.output_dir / (
-            f"dataset{dataset_number}_predictions_{run_id}.csv"
-        )
-        dataset_predictions.to_csv(
-            prediction_path,
-            index=False,
-            columns=["transcript_id", "transcript_position", "score"],
-        )
-        prediction_paths[str(dataset_number)] = prediction_path.name
-        print(f"Scored dataset {dataset_number}: {len(dataset_predictions):,} sites")
-
-    run_info = {
-        "trained_on_datasets": [0, 1],
-        "predicted_datasets": [0, 1, 2],
-        "training_sites": int(len(train_sites)),
-        "training_positive_fraction": training_prevalence,
-        "balanced_prior_corrected_to_training_prevalence": True,
-        "prediction_sites_by_dataset": {
-            str(dataset_number): int(len(site_tables[dataset_number]))
-            for dataset_number in (0, 1, 2)
-        },
-        "baseline_parameters": baseline_parameters,
-        "eval_iterations": args.eval_iterations,
-        "prediction_files": prediction_paths,
-        "note": "Dataset 0 and 1 scores are in-sample; dataset 2 was excluded from fitting.",
-    }
-    (args.output_dir / "run_info.json").write_text(
-        json.dumps(run_info, indent=2),
-        encoding="utf-8",
+        predictions["score"] = scores
+        for number in (0, 1):
+            predictions[predictions["dataset"] == number].to_csv(
+                run_dir / f"dataset{number}_{name}_predictions.csv", index=False
+            )
+        for dataset, values in [
+            ("pooled", metrics["pooled"]),
+            *metrics["datasets"].items(),
+        ]:
+            metric_rows.append(
+                {"split": name, "dataset": dataset, "pooling": "noisy_or", **values}
+            )
+    bag_scores, fraction_scores, metrics = evaluate_data2(
+        model,
+        tables[2],
+        read_maps,
+        mean,
+        std,
+        params,
+        device,
+        args.eval_iterations,
+        args.seed + 2,
     )
-
-    torch.save(
+    final_metrics["data2"] = metrics
+    print("data2 final test:", json.dumps(metrics), flush=True)
+    predictions = tables[2][["transcript_id", "transcript_position", "label"]].copy()
+    predictions["binary_label"] = (predictions["label"] > 0).astype(int)
+    predictions["noisy_or_score"], predictions["mean_score"] = (
+        bag_scores,
+        fraction_scores,
+    )
+    predictions.to_csv(run_dir / "dataset2_test_predictions.csv", index=False)
+    errors = predictions.assign(
+        abs_error=(predictions["mean_score"] - predictions["label"]).abs(),
+        squared_error=np.square(predictions["mean_score"] - predictions["label"]),
+    )
+    by_fraction = errors.groupby("label").agg(
+        sites=("mean_score", "size"),
+        mean_prediction=("mean_score", "mean"),
+        mae=("abs_error", "mean"),
+        mse=("squared_error", "mean"),
+    )
+    by_fraction["rmse"] = np.sqrt(by_fraction.pop("mse"))
+    by_fraction.to_csv(run_dir / "dataset2_by_fraction.csv")
+    metric_rows.extend(
+        {"split": "test", "dataset": "2", "pooling": pooling, **values}
+        for pooling, values in metrics.items()
+    )
+    pd.DataFrame(metric_rows).to_csv(run_dir / "metrics.csv", index=False)
+    (run_dir / "metrics.json").write_text(
+        json.dumps(final_metrics, indent=2, allow_nan=False)
+    )
+    run_info.update(
         {
-            "model_state_dict": baseline_model.state_dict(),
-            "baseline_parameters": baseline_parameters,
-            "feature_mean": train_mean,
-            "feature_std": train_std,
-            "training_prevalence": training_prevalence,
-        },
-        args.output_dir / "baseline_model.pt",
+            "best_epoch": best_epoch,
+            "best_validation_value": best_value,
+            "baseline_parameters": params,
+        }
     )
-    print("\nRun information:")
-    print(json.dumps(run_info, indent=2))
-    print("Saved prediction files:", prediction_paths)
-    print("Saved outputs to:", args.output_dir.resolve())
+    (run_dir / "run_info.json").write_text(json.dumps(run_info, indent=2))
+    print("Saved outputs to:", run_dir.resolve())
 
 
 if __name__ == "__main__":
