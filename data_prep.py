@@ -4,13 +4,26 @@ from pathlib import Path
 import ijson
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedGroupKFold
+from sklearn.model_selection import train_test_split
 
-DATA_FILES = {
-    0: ("data0/dataset0.json", "data0/data.info.labelled"),
-    1: ("data1/dataset1.json", "data1/data.info"),
-    2: ("data2/dataset2.json", "data2/data.info"),
-}
+
+def dataset_files(dataset_number):
+    """Resolve conventional dataN filenames, including future datasets."""
+    if dataset_number < 0:
+        raise ValueError("Dataset numbers must be nonnegative")
+    metadata = "data.info.labelled" if dataset_number == 0 else "data.info"
+    return f"data{dataset_number}/dataset{dataset_number}.json", f"data{dataset_number}/{metadata}"
+
+
+def normalize_labels(sites, dataset_number):
+    sites = sites.copy()
+    labels = pd.to_numeric(sites["label"], errors="raise")
+    if not np.isfinite(labels).all() or (labels < 0).any():
+        raise ValueError("Labels must be finite and nonnegative")
+    if dataset_number != 2 and not labels.isin([0, 1]).all():
+        raise ValueError(f"Dataset {dataset_number} labels must be binary")
+    sites["label"] = (labels > 0).astype(int)
+    return sites
 
 
 def iter_feature_sites(feature_path: Path):
@@ -31,9 +44,8 @@ def prepare_one(
     data_dir: Path,
     cache_dir: Path,
     dataset_number: int,
-    binary_labels: bool = True,
 ):
-    feature_name, metadata_name = DATA_FILES[dataset_number]
+    feature_name, metadata_name = dataset_files(dataset_number)
     feature_path = data_dir / feature_name
     metadata_path = data_dir / metadata_name
     out_dir = cache_dir / f"dataset{dataset_number}"
@@ -51,7 +63,7 @@ def prepare_one(
         "metadata_size": metadata_path.stat().st_size,
         "metadata_mtime_ns": metadata_path.stat().st_mtime_ns,
         "n_features": 9,
-        "cache_version": 4,
+        "cache_version": 5,
     }
     if manifest_path.exists() and sites_path.exists() and reads_path.exists():
         if json.loads(manifest_path.read_text(encoding="utf-8")) == signature:
@@ -68,17 +80,9 @@ def prepare_one(
         sites["transcript_position"], errors="raise"
     ).astype(int)
     if has_read_counts:
-        sites["n_reads"] = pd.to_numeric(sites["n_reads"], errors="raise").astype(int)
-    # Validate before casting: converting a fractional target to int first
-    # could silently turn an invalid binary label into zero.
-    sites["label"] = pd.to_numeric(sites["label"], errors="raise")
-    if binary_labels and not sites["label"].isin([0, 1]).all():
-        raise ValueError(f"Dataset {dataset_number} training labels must be binary")
-    if not binary_labels and (
-        not np.isfinite(sites["label"]).all() or not sites["label"].between(0, 1).all()
-    ):
-        raise ValueError(f"Dataset {dataset_number} labels must be in [0, 1]")
-    sites["label"] = sites["label"].astype(int if binary_labels else float)
+        sites["n_reads"] = pd.to_numeric(
+            sites["n_reads"], errors="raise").astype(int)
+    sites = normalize_labels(sites, dataset_number)
     if sites.duplicated(["transcript_id", "transcript_position"]).any():
         raise ValueError(f"Duplicate site keys in {metadata_path}")
     if has_read_counts and (sites["n_reads"] <= 0).any():
@@ -153,7 +157,7 @@ def prepare_one(
                 f"JSON={len(values)}"
             )
         start = int(sites.at[row_index, "read_start"])
-        read_map[start : start + expected_reads] = values
+        read_map[start: start + expected_reads] = values
         sites.at[row_index, "sequence"] = sequence.upper()
         seen[row_index] = True
         processed += 1
@@ -164,7 +168,8 @@ def prepare_one(
     del read_map
     if not seen.all():
         missing = int((~seen).sum())
-        raise ValueError(f"{missing} metadata sites were missing from {feature_name}")
+        raise ValueError(
+            f"{missing} metadata sites were missing from {feature_name}")
 
     sites.to_csv(sites_path, index=False)
     manifest_path.write_text(json.dumps(signature, indent=2), encoding="utf-8")
@@ -183,27 +188,34 @@ def prepare_datasets(data_dir: Path, cache_dir: Path, dataset_numbers=(0, 1)):
             data_dir,
             cache_dir,
             dataset_number,
-            binary_labels=dataset_number in (0, 1),
         )
     return prepared
 
 
+def validate_ratios(ratios):
+    ratios = np.asarray(ratios, dtype=float)
+    if ratios.shape != (3,) or not np.isfinite(ratios).all() or (ratios < 0).any() or not np.isclose(ratios.sum(), 1):
+        raise ValueError(
+            "Split ratios must be finite, nonnegative and sum to one")
+    return ratios
+
+
 def split_sites(sites, seed=42, ratios=(0.7, 0.15, 0.15)):
-    """Stratify one dataset by label, keeping each transcript in one partition."""
+    """Stratify independent rows; zero-sized partitions are supported."""
+    ratios = validate_ratios(ratios)
     sites = sites.copy().reset_index(drop=True)
-    folds = min(20, sites["transcript_id"].nunique())
-    if folds < 3:
-        raise ValueError("At least three transcripts are required for train/val/test")
-    train_end = int(np.clip(round(folds * ratios[0]), 1, folds - 2))
-    val_end = int(
-        np.clip(round(folds * (ratios[0] + ratios[1])), train_end + 1, folds - 1)
-    )
-    splitter = StratifiedGroupKFold(n_splits=folds, shuffle=True, random_state=seed)
-    for fold, (_, indices) in enumerate(
-        splitter.split(sites, sites["label"], sites["transcript_id"])
-    ):
-        name = "train" if fold < train_end else "val" if fold < val_end else "test"
-        sites.loc[indices, "split"] = name
-    if sites.groupby("transcript_id")["split"].nunique().gt(1).any():
-        raise AssertionError("Transcript appears in multiple partitions")
+    remaining = np.arange(len(sites))
+    active = np.flatnonzero(ratios)
+    for offset, partition in enumerate(active):
+        if offset == len(active) - 1:
+            selected = remaining
+        else:
+            selected, remaining = train_test_split(
+                remaining,
+                train_size=float(ratios[partition] /
+                                 ratios[active[offset:]].sum()),
+                stratify=sites.loc[remaining, "label"],
+                random_state=seed,
+            )
+        sites.loc[selected, "split"] = ("train", "val", "test")[partition]
     return sites

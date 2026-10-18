@@ -1,59 +1,41 @@
-# m6A site classifier baseline
+# m6A site classifier
 
-This project trains one m6Anet-inspired MIL model on binary site labels from data0 and data1. Each site supplies nine numeric features per read and three overlapping 5-mers. Training uses fixed-size read bags and noisy-OR pooling. Data2 is an external test dataset and never contributes to training, normalization, or checkpoint selection.
+A m6Anet-inspired multiple instance learning (MIL) model with nine features per read, sequence embeddings, and noisy-OR pooling. All targets are binary; data2 labels are converted using `label > 0`.
 
-## Setup and run
-
-From the repository root, with [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
+## Run
 
 ```bash
 uv sync --locked
-uv run --locked python train.py --data-dir ./data --output-dir ./runs/grouped_baseline --cache-dir ./runs/m6anet_baseline/cache --device cpu
+# Run each training variant against the same validation and test sets.
+uv run python train.py --data-dir data --train-datasets 0 --output-dir runs/data0 --cache-dir runs/cache
+uv run python train.py --data-dir data --train-datasets 1 --output-dir runs/data1 --cache-dir runs/cache
+uv run python train.py --data-dir data --train-datasets 0 1 --output-dir runs/combined --cache-dir runs/cache
 ```
 
-The project pins Python 3.12 in `.python-version`. Dependencies are declared in `pyproject.toml`, and `uv.lock` records the resolved versions. uv creates the root `.venv`; environment activation is optional when using `uv run`.
+Expected files: `data/dataN/datasetN.json` and `data/dataN/data.info`. Data0 uses `data.info.labelled` instead. New data3, data4, etc. follow the same convention and require binary labels.
 
-The supplied data belong in the root `data/` directory:
+## Dataset selection
 
-```text
-data/
-  data0/dataset0.json
-  data0/data.info.labelled
-  data1/dataset1.json
-  data1/data.info
-  data2/dataset2.json
-  data2/data.info
-```
-
-## Splitting and training
-
-Data0 and data1 are independently divided into approximate 70/15/15 train/validation/test partitions using scikit-learn's `StratifiedGroupKFold`: 20 folds are combined into 14 train, 3 validation, and 3 test folds. Smaller datasets use fewer folds. The algorithm balances site-label proportions as group sizes permit. Cross-dataset transcript overlap does not constrain splitting.
-
-The grouping key is only `transcript_id`; `gene_id` is ignored. All sites from one transcript remain in one partition within their dataset. Data0 is split first on its own labels and transcript IDs, and data1 is split separately on its own labels and transcript IDs. Only then are the corresponding training, validation, and test partitions combined. The same transcript ID in different datasets is independent and may receive different partition assignments.
+- Each dataset is split independently into stratified 70/15/15 train/validation/test rows. Transcript and gene IDs do not constrain splitting. Matching sites across datasets remain independent.
+- Splits depend on the seed (default 42), dataset number, row order, labels, and ratios, never on which training variant is selected. Keep these inputs fixed for comparisons.
+- `--train-datasets` defaults to `0 1`. Combined training uses the same training rows as the individual variants.
+- `--val-datasets` defaults to `0 1`; `--test-datasets` defaults to `0 1 2`. These stay fixed across training variants. Metrics include pooled and individual dataset results. Pooled test includes data2.
+- Data2 always uses 100% test rows and cannot be selected for training or validation.
+- `--split-ratios 0.7 0.15 0.15` changes the default ratios for datasets other than data2. Integer row counts may require rounding. Very small classes may not support stratification.
+- `--dataset-splits splits.json` overrides ratios per dataset, for example `{"0": [1, 0, 0], "1": [1, 0, 0]}` for final training on all data0/data1 rows:
 
 ```bash
-uv run --locked python train.py --data-dir ./data --split-only
+uv run python train.py --data-dir data --dataset-splits splits.json --train-datasets 0 1 --val-datasets --test-datasets 2
 ```
 
-Change proportions with `--split-ratios`, or the reproducible seed with `--seed`. The model trains on combined data0/data1 training sites. Means and standard deviations use training reads only. Inverse-class-frequency sampling is enabled for training; `--no-balanced-sampler` disables it. Reported metrics always use the natural, unweighted site distribution. No prior correction is applied to the read probabilities or pooled scores.
+With no validation datasets, the final epoch is saved. Use `--split-only` to export assignments without loading features or training. Assignment files include all partitions for each loaded dataset; the dataset selectors determine which partitions are actually used.
 
-Defaults: 10 epochs, batch size 256, 20 reads per bag, and 5 evaluation iterations. Each epoch logs BCE loss, PR AUC, ROC AUC. Evaluation bags are deterministic across epochs without changing training RNGs. The checkpoint is selected by pooled validation PR AUC; `--selection-metric loss` or `roc_auc` changes selection. Test is evaluated only after the best checkpoint is restored.
+## Training and outputs
 
-## Data2 evaluation
+Defaults: 10 epochs, batch size 256, 20 reads per bag, and 5 evaluation iterations. Normalization uses training reads only. Inverse-class-frequency sampling is enabled; disable with `--no-balanced-sampler`.
 
-The entire dataset is evaluated once after checkpoint selection. Every read is scored in bounded chunks using training normalization and the selected model. Those same read probabilities supply two outputs:
+Checkpoint selection uses pooled validation PR AUC (`--selection-metric loss` or `roc_auc` also supported). Tests run after checkpoint selection. Every dataset uses the same sampled-bag noisy-OR evaluation with BCE, PR AUC, and ROC AUC. Single-class AUCs are null. There is no fraction regression evaluation.
 
-- **Noisy-OR:** average fixed-size bag scores over `--eval-iterations` (default five), sampling without replacement when enough reads exist. Compare with binary `label > 0` using BCE loss, PR AUC, and ROC AUC.
-- **Mean pooling:** average probabilities across all reads at each site. Compare with the original fraction using site-averaged MAE and RMSE. Fraction accuracy is exploratory because training uses only binary site supervision.
+Each timestamped output directory contains split CSVs, settings and split counts in `run_info.json`, checkpoint weights and normalization in `best_model.pt`, epoch history and training curves, final metrics, and per-dataset prediction CSVs. `--cache-dir` shares prepared features across runs.
 
-Errors are also summarized by original fraction label. All sites have equal metric weight. Single-class partitions report null AUC values with a reason. Data2 is never subdivided or used to tune the model. Its full dataset contains both binary classes under `label > 0`.
-
-## Outputs
-
-Each run creates a timestamped directory containing:
-
-- `datasetN_splits.csv` and `run_info.json`: assignments, actual counts, and run settings. Every data2 site is marked test.
-- `history.json`, `history.csv`, `training_curves.png`, and `training_curves.pdf`: epoch train/validation loss and AUC curves for pooled, data0, and data1 results, with the selected epoch marked. These training metrics are measured after each epoch on natural training sites; batch logs separately show sampled training BCE.
-- `best_model.pt`: selected weights and training-only normalization.
-- `metrics.json` and `metrics.csv`: selected-checkpoint metrics for data0/data1 train/val/test and data2's two pooling methods.
-- Six data0/data1 partition prediction CSVs; `dataset2_test_predictions.csv` with original fractions, binary labels, noisy-OR scores, and mean scores; `dataset2_by_fraction.csv` with mean predictions, MAE, and RMSE per fraction.
+Run checks with `uv run python -m unittest discover -s tests`.

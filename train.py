@@ -12,8 +12,8 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from data_prep import DATA_FILES, prepare_datasets, split_sites
-from mil_model import M6ANetInspiredMIL, SiteBagDataset, encode_5mer, noisy_or
+from data_prep import dataset_files, normalize_labels, prepare_datasets, split_sites, validate_ratios
+from mil_model import M6ANetInspiredMIL, SiteBagDataset
 
 SPLITS = ("train", "val", "test")
 
@@ -29,7 +29,8 @@ def set_seed(seed):
 def open_read_maps(prepared, sites):
     read_maps = {}
     for dataset_number, (_, reads_path) in prepared.items():
-        n_reads = int(sites.loc[sites["dataset"] == dataset_number, "n_reads"].sum())
+        n_reads = int(sites.loc[sites["dataset"] ==
+                      dataset_number, "n_reads"].sum())
         read_maps[dataset_number] = np.memmap(
             reads_path,
             dtype=np.float32,
@@ -45,7 +46,7 @@ def feature_statistics(train_sites, read_maps):
     sums_sq = np.zeros(9, dtype=np.float64)
     for row in train_sites.itertuples(index=False):
         reads = read_maps[int(row.dataset)][
-            int(row.read_start) : int(row.read_start) + int(row.n_reads)
+            int(row.read_start): int(row.read_start) + int(row.n_reads)
         ]
         values = np.asarray(reads, dtype=np.float64)
         sums += values.sum(axis=0)
@@ -64,8 +65,10 @@ def make_loader(
         labels = sites["label"].to_numpy(dtype=int)
         counts = np.bincount(labels, minlength=2)
         if np.any(counts == 0):
-            raise ValueError("Both label classes must be present in the training split")
-        sample_weights = np.where(labels == 1, 1.0 / counts[1], 1.0 / counts[0])
+            raise ValueError(
+                "Both label classes must be present in the training split")
+        sample_weights = np.where(
+            labels == 1, 1.0 / counts[1], 1.0 / counts[0])
         sampler = WeightedRandomSampler(
             torch.as_tensor(sample_weights, dtype=torch.double),
             num_samples=2 * int(max(counts)),
@@ -98,11 +101,13 @@ def compute_metrics(labels, scores):
     labels = np.asarray(labels, dtype=np.float64)
     scores = np.asarray(scores, dtype=np.float64)
     if not len(labels) or labels.shape != scores.shape:
-        raise ValueError("Metrics require nonempty, equally sized labels and scores")
+        raise ValueError(
+            "Metrics require nonempty, equally sized labels and scores")
     if not np.isfinite(labels).all() or not np.isfinite(scores).all():
         raise ValueError("Metrics require finite targets and probabilities")
     if not np.isin(labels, [0, 1]).all() or not ((scores >= 0) & (scores <= 1)).all():
-        raise ValueError("Classification targets must be binary and scores in [0, 1]")
+        raise ValueError(
+            "Classification targets must be binary and scores in [0, 1]")
     clipped = np.clip(scores, 1e-7, 1 - 1e-7)
     binary = (labels > 0).astype(int)
     metrics = {
@@ -222,7 +227,7 @@ def train_baseline_model(
         mean,
         std,
         params["batch_size"],
-        shuffle=False,
+        shuffle=not params["balanced"],
         balanced=params["balanced"],
     )
     criterion = nn.BCELoss()
@@ -235,7 +240,8 @@ def train_baseline_model(
         for batch_number, (_, reads, kmers, labels) in enumerate(loader, start=1):
             optimizer.zero_grad(set_to_none=True)
             predictions = model(reads.to(device), kmers.to(device))
-            loss = criterion(predictions.clamp(1e-7, 1 - 1e-7), labels.to(device))
+            loss = criterion(predictions.clamp(
+                1e-7, 1 - 1e-7), labels.to(device))
             if not torch.isfinite(loss):
                 raise RuntimeError("Nonfinite training loss")
             loss.backward()
@@ -251,6 +257,8 @@ def train_baseline_model(
         # Natural, unweighted site distributions are used for all reported metrics.
         epoch_metrics = {}
         for name in ("train", "val"):
+            if partitions[name].empty:
+                continue
             _, metrics = evaluate_partition(
                 model,
                 partitions[name],
@@ -264,12 +272,13 @@ def train_baseline_model(
             )
             epoch_metrics[name] = metrics
             print_metrics(f"Epoch {epoch} {name}", metrics)
-        value = epoch_metrics["val"]["pooled"][selection_metric]
-        if value is None:
+        has_validation = "val" in epoch_metrics
+        value = epoch_metrics["val"]["pooled"][selection_metric] if has_validation else None
+        if has_validation and value is None:
             raise ValueError(
                 f"Validation {selection_metric} is undefined; use --selection-metric loss"
             )
-        improved = best_value is None or (
+        improved = not has_validation or best_value is None or (
             value < best_value if selection_metric == "loss" else value > best_value
         )
         if improved:
@@ -285,7 +294,7 @@ def train_baseline_model(
                     "feature_mean": torch.from_numpy(mean),
                     "feature_std": torch.from_numpy(std),
                     "best_epoch": best_epoch,
-                    "selection_metric": selection_metric,
+                    "selection_metric": selection_metric if has_validation else None,
                     "validation_value": best_value,
                     "auc_target": "label > 0",
                     "prior_correction": False,
@@ -316,9 +325,10 @@ def save_curves(history, output_dir, best_epoch):
     import matplotlib.pyplot as plt
 
     rows = [
-        {"epoch": epoch["epoch"], "split": split, "dataset": dataset, **metrics}
+        {"epoch": epoch["epoch"], "split": split,
+            "dataset": dataset, **metrics}
         for epoch in history
-        for split in ("train", "val")
+        for split in ("train", "val") if split in epoch
         for dataset, metrics in [
             ("pooled", epoch[split]["pooled"]),
             *epoch[split]["datasets"].items(),
@@ -337,8 +347,10 @@ def save_curves(history, output_dir, best_epoch):
                 values = table[
                     (table["dataset"] == dataset) & (table["split"] == split)
                 ]
-                ax.plot(values["epoch"], values[metric], marker="o", label=split)
-            ax.axvline(best_epoch, color="gray", linestyle=":", label="selected epoch")
+                ax.plot(values["epoch"], values[metric],
+                        marker="o", label=split)
+            ax.axvline(best_epoch, color="gray",
+                       linestyle=":", label="selected epoch")
             ax.set(
                 title=f"{dataset if dataset == 'pooled' else 'data' + str(dataset)}: {metric}",
                 xlabel="Epoch",
@@ -354,70 +366,25 @@ def save_curves(history, output_dir, best_epoch):
     plt.close(fig)
 
 
-def evaluate_data2(
-    model, sites, read_maps, mean, std, params, device, iterations, seed
-):
-    """Predict every read once; pool fixed-size bags and the complete read set."""
-    rng = np.random.default_rng(seed)
-    bag_scores, fraction_scores = [], []
-    chunk_size = params["batch_size"] * params["n_reads_per_site"]
-    model.eval()
-    with torch.no_grad():
-        for row in sites.itertuples(index=False):
-            reads = read_maps[2][row.read_start : row.read_start + row.n_reads]
-            kmers = torch.tensor(
-                [[encode_5mer(row.sequence[i : i + 5]) for i in range(3)]],
-                device=device,
-            )
-            probabilities = []
-            for start in range(0, len(reads), chunk_size):
-                values = (np.asarray(reads[start : start + chunk_size]) - mean) / std
-                features = (
-                    torch.from_numpy(np.ascontiguousarray(values))
-                    .unsqueeze(0)
-                    .to(device)
-                )
-                probabilities.append(
-                    model.read_probabilities(features, kmers).cpu().numpy().ravel()
-                )
-            probabilities = np.concatenate(probabilities)
-            bags = np.stack(
-                [
-                    rng.choice(
-                        probabilities,
-                        params["n_reads_per_site"],
-                        replace=len(probabilities) < params["n_reads_per_site"],
-                    )
-                    for _ in range(iterations)
-                ]
-            )
-            bag_scores.append(float(noisy_or(torch.from_numpy(bags)).mean()))
-            fraction_scores.append(float(probabilities.mean()))
-    bag_scores, fraction_scores = np.asarray(bag_scores), np.asarray(fraction_scores)
-    errors = fraction_scores - sites["label"].to_numpy(dtype=float)
-    metrics = {
-        "noisy_or": compute_metrics((sites["label"] > 0).astype(int), bag_scores),
-        "mean": {
-            "mae": float(np.abs(errors).mean()),
-            "rmse": float(np.sqrt(np.square(errors).mean())),
-            "sites": len(sites),
-        },
-    }
-    return bag_scores, fraction_scores, metrics
-
-
 def main():
     parser = argparse.ArgumentParser(
-        description="Train on grouped data0/data1 splits; evaluate all data2 with two pooling methods."
+        description="Train MIL models with independent stratified dataset splits."
     )
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument(
-        "--output-dir", type=Path, default=Path("runs/grouped_baseline")
+        "--output-dir", type=Path, default=Path("runs/baseline")
     )
     parser.add_argument("--cache-dir", type=Path, default=None)
     parser.add_argument(
         "--split-ratios", type=float, nargs=3, default=[0.7, 0.15, 0.15]
     )
+    parser.add_argument("--train-datasets", type=int,
+                        nargs="+", default=[0, 1])
+    parser.add_argument("--val-datasets", type=int, nargs="*", default=[0, 1])
+    parser.add_argument("--test-datasets", type=int,
+                        nargs="*", default=[0, 1, 2])
+    parser.add_argument("--dataset-splits", type=Path,
+                        help='JSON mapping dataset numbers to [train, val, test] ratios')
     parser.add_argument("--split-only", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--n-reads-per-site", type=int, default=20)
@@ -429,7 +396,8 @@ def main():
         "--selection-metric", choices=("loss", "pr_auc", "roc_auc"), default="pr_auc"
     )
     parser.add_argument("--no-balanced-sampler", action="store_true")
-    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--device", choices=("auto",
+                        "cpu", "cuda"), default="auto")
     args = parser.parse_args()
     for name in (
         "epochs",
@@ -440,65 +408,80 @@ def main():
     ):
         if getattr(args, name) < 1:
             parser.error(f"--{name.replace('_', '-')} must be positive")
-    if np.any(np.asarray(args.split_ratios) <= 0) or not np.isclose(
-        sum(args.split_ratios), 1
-    ):
-        parser.error("Split ratios must be positive and sum to one")
+    if 2 in args.train_datasets or 2 in args.val_datasets:
+        parser.error("data2 is reserved exclusively for testing")
+    selected = {"train": args.train_datasets,
+                "val": args.val_datasets, "test": args.test_datasets}
+    numbers = sorted(set(sum(selected.values(), [])))
+    overrides = json.loads(args.dataset_splits.read_text()
+                           ) if args.dataset_splits else {}
+    if not isinstance(overrides, dict):
+        parser.error(
+            "Dataset splits must be a JSON object mapping dataset numbers to ratios")
+    ratios = {n: overrides.get(
+        str(n), [0, 0, 1] if n == 2 else args.split_ratios) for n in numbers}
+    if 2 in ratios and ratios[2] != [0, 0, 1]:
+        parser.error("data2 must use split ratios [0, 0, 1]")
+    for n in numbers:
+        try:
+            dataset_files(n)
+            validate_ratios(ratios[n])
+        except ValueError as error:
+            parser.error(str(error))
     run_dir = args.output_dir / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     run_dir.mkdir(parents=True)
     if args.split_only:
-        tables = {
-            n: pd.read_csv(
-                args.data_dir / DATA_FILES[n][1],
-                dtype={"transcript_id": str},
-            )
-            for n in (0, 1, 2)
-        }
+        tables = {n: pd.read_csv(
+            args.data_dir / dataset_files(n)[1], dtype={"transcript_id": str}) for n in numbers}
     else:
         prepared = prepare_datasets(
-            args.data_dir,
-            args.cache_dir or args.output_dir / "cache",
-            dataset_numbers=(0, 1, 2),
-        )
-        tables = {
-            n: pd.read_csv(prepared[n][0], dtype={"transcript_id": str})
-            for n in (0, 1, 2)
-        }
-    for number in (0, 1):
-        tables[number] = split_sites(
-            tables[number], seed=args.seed + number, ratios=args.split_ratios
-        )
-    tables[2]["split"] = "test"
+            args.data_dir, args.cache_dir or args.output_dir / "cache", dataset_numbers=numbers)
+        tables = {n: pd.read_csv(prepared[n][0], dtype={
+                                 "transcript_id": str}) for n in numbers}
+    for number in numbers:
+        tables[number] = split_sites(normalize_labels(
+            tables[number], number), seed=args.seed + number, ratios=ratios[number])
     summary = {}
     for number, sites in tables.items():
         sites["dataset"] = number
         sites.to_csv(run_dir / f"dataset{number}_splits.csv", index=False)
         summary[str(number)] = (
-            sites.groupby("split")["label"].agg(["count", "mean"]).to_dict("index")
+            sites.groupby("split")["label"].agg(
+                ["count", "mean"]).to_dict("index")
         )
-        print(f"data{number} split summary: {summary[str(number)]}", flush=True)
+        print(
+            f"data{number} split summary: {summary[str(number)]}", flush=True)
     run_info = {
         "seed": args.seed,
-        "split_ratios": args.split_ratios,
+        "split_ratios": ratios,
+        "datasets": selected,
         "split_summary": summary,
-        "trained_on_datasets": [0, 1],
+        "trained_on_datasets": args.train_datasets,
         "data2_used_for_selection": False,
         "prior_correction": False,
         "eval_iterations": args.eval_iterations,
-        "selection_metric": args.selection_metric,
+        "selection_metric": args.selection_metric if args.val_datasets else None,
     }
     (run_dir / "run_info.json").write_text(json.dumps(run_info, indent=2))
     if args.split_only:
         print("Saved split assignments to:", run_dir.resolve())
         return
-    binary_sites = pd.concat([tables[0], tables[1]], ignore_index=True)
+    all_sites = pd.concat(tables.values(), ignore_index=True)
     partitions = {
-        name: binary_sites[binary_sites["split"] == name].reset_index(drop=True)
+        name: all_sites[(all_sites["split"] == name) & all_sites["dataset"].isin(
+            selected[name])].reset_index(drop=True)
         for name in SPLITS
     }
-    if args.selection_metric != "loss" and partitions["val"]["label"].nunique() < 2:
-        parser.error("Validation has one binary class; choose --selection-metric loss")
-    read_maps = open_read_maps(prepared, pd.concat(tables.values(), ignore_index=True))
+    if partitions["train"].empty:
+        parser.error("The selected training partition is empty")
+    if args.val_datasets and partitions["val"].empty:
+        parser.error(
+            "Validation is empty; use --val-datasets with no values for final-epoch training")
+    if not partitions["val"].empty and args.selection_metric != "loss" and partitions["val"]["label"].nunique() < 2:
+        parser.error(
+            "Validation has one binary class; choose --selection-metric loss")
+    read_maps = open_read_maps(prepared, pd.concat(
+        tables.values(), ignore_index=True))
     device = torch.device(
         "cuda"
         if args.device == "auto" and torch.cuda.is_available()
@@ -533,6 +516,8 @@ def main():
     )
     final_metrics, metric_rows = {}, []
     for name in SPLITS:
+        if partitions[name].empty:
+            continue
         scores, metrics = evaluate_partition(
             model,
             partitions[name],
@@ -550,7 +535,7 @@ def main():
             ["dataset", "transcript_id", "transcript_position", "label", "split"]
         ].copy()
         predictions["score"] = scores
-        for number in (0, 1):
+        for number in sorted(predictions["dataset"].unique()):
             predictions[predictions["dataset"] == number].to_csv(
                 run_dir / f"dataset{number}_{name}_predictions.csv", index=False
             )
@@ -559,50 +544,16 @@ def main():
             *metrics["datasets"].items(),
         ]:
             metric_rows.append(
-                {"split": name, "dataset": dataset, "pooling": "noisy_or", **values}
+                {"split": name, "dataset": dataset,
+                    "pooling": "noisy_or", **values}
             )
-    bag_scores, fraction_scores, metrics = evaluate_data2(
-        model,
-        tables[2],
-        read_maps,
-        mean,
-        std,
-        params,
-        device,
-        args.eval_iterations,
-        args.seed + 2,
-    )
-    final_metrics["data2"] = metrics
-    print("data2 final test:", json.dumps(metrics), flush=True)
-    predictions = tables[2][["transcript_id", "transcript_position", "label"]].copy()
-    predictions["binary_label"] = (predictions["label"] > 0).astype(int)
-    predictions["noisy_or_score"], predictions["mean_score"] = (
-        bag_scores,
-        fraction_scores,
-    )
-    predictions.to_csv(run_dir / "dataset2_test_predictions.csv", index=False)
-    errors = predictions.assign(
-        abs_error=(predictions["mean_score"] - predictions["label"]).abs(),
-        squared_error=np.square(predictions["mean_score"] - predictions["label"]),
-    )
-    by_fraction = errors.groupby("label").agg(
-        sites=("mean_score", "size"),
-        mean_prediction=("mean_score", "mean"),
-        mae=("abs_error", "mean"),
-        mse=("squared_error", "mean"),
-    )
-    by_fraction["rmse"] = np.sqrt(by_fraction.pop("mse"))
-    by_fraction.to_csv(run_dir / "dataset2_by_fraction.csv")
-    metric_rows.extend(
-        {"split": "test", "dataset": "2", "pooling": pooling, **values}
-        for pooling, values in metrics.items()
-    )
     pd.DataFrame(metric_rows).to_csv(run_dir / "metrics.csv", index=False)
     (run_dir / "metrics.json").write_text(
         json.dumps(final_metrics, indent=2, allow_nan=False)
     )
     run_info.update(
         {
+            "checkpoint_selection": "validation" if not partitions["val"].empty else "final_epoch",
             "best_epoch": best_epoch,
             "best_validation_value": best_value,
             "baseline_parameters": params,
