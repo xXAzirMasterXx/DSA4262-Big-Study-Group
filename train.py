@@ -4,7 +4,6 @@ import json
 import random
 import time
 from pathlib import Path
-from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 
 import numpy as np
 import pandas as pd
@@ -13,6 +12,7 @@ from torch import nn
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from data_prep import dataset_files, normalize_labels, prepare_datasets, split_sites, validate_ratios
+from evaluation import compute_metrics, partition_metrics, print_metrics, export_predictions, metric_records
 from mil_model import M6ANetInspiredMIL, SiteBagDataset
 
 SPLITS = ("train", "val", "test")
@@ -96,42 +96,6 @@ def score_dataset(model, loader, n_sites, device, iterations=1):
     return scores / iterations
 
 
-def compute_metrics(labels, scores):
-    """Binary BCE, trapezoidal PR AUC (as in m6Anet), and ROC AUC."""
-    labels = np.asarray(labels, dtype=np.float64)
-    scores = np.asarray(scores, dtype=np.float64)
-    if not len(labels) or labels.shape != scores.shape:
-        raise ValueError(
-            "Metrics require nonempty, equally sized labels and scores")
-    if not np.isfinite(labels).all() or not np.isfinite(scores).all():
-        raise ValueError("Metrics require finite targets and probabilities")
-    if not np.isin(labels, [0, 1]).all() or not ((scores >= 0) & (scores <= 1)).all():
-        raise ValueError(
-            "Classification targets must be binary and scores in [0, 1]")
-    clipped = np.clip(scores, 1e-7, 1 - 1e-7)
-    binary = (labels > 0).astype(int)
-    metrics = {
-        "loss": float(
-            -(labels * np.log(clipped) + (1 - labels) * np.log1p(-clipped)).mean()
-        ),
-        "pr_auc": None,
-        "roc_auc": None,
-        "sites": int(len(labels)),
-        "auc_positive_sites": int(binary.sum()),
-        "auc_target": "label > 0",
-        "auc_unavailable_reason": None,
-    }
-    if np.unique(binary).size < 2:
-        metrics["auc_unavailable_reason"] = (
-            "Only one binary target class is present in this split"
-        )
-    else:
-        precision, recall, _ = precision_recall_curve(binary, scores)
-        metrics["pr_auc"] = float(auc(recall, precision))
-        metrics["roc_auc"] = float(roc_auc_score(binary, scores))
-    return metrics
-
-
 def evaluate(
     model, sites, read_maps, n_reads, mean, std, batch_size, device, iterations, seed=42
 ):
@@ -168,32 +132,7 @@ def evaluate_partition(
         iterations,
         seed,
     )
-    metrics = {
-        "pooled": compute_metrics(sites["label"].to_numpy(), scores),
-        "datasets": {},
-    }
-    for number in sorted(sites["dataset"].unique()):
-        mask = sites["dataset"].to_numpy() == number
-        metrics["datasets"][str(number)] = compute_metrics(
-            sites.loc[mask, "label"].to_numpy(), scores[mask]
-        )
-    return scores, metrics
-
-
-def print_metrics(prefix, metrics):
-    for name, values in [
-        ("pooled", metrics["pooled"]),
-        *[(f"data{n}", m) for n, m in metrics["datasets"].items()],
-    ]:
-
-        def display(value):
-            return "N/A (single target class)" if value is None else f"{value:.6f}"
-
-        print(
-            f"{prefix} {name}: loss={values['loss']:.6f} | "
-            f"PR AUC={display(values['pr_auc'])} | ROC AUC={display(values['roc_auc'])}",
-            flush=True,
-        )
+    return scores, partition_metrics(sites, scores)
 
 
 def train_baseline_model(
@@ -368,8 +307,15 @@ def save_curves(history, output_dir, best_epoch):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Train MIL models with independent stratified dataset splits."
+        description="Train MIL or classical site classifiers with shared dataset splits."
     )
+    parser.add_argument("--model", choices=("mil", "extra_trees", "random_forest",
+                        "gradient_boosting", "logistic_regression", "rbf_svm"), default="mil")
+    parser.add_argument("--model-params", type=Path,
+                        help="Classical estimator parameters: JSON object or list of candidate objects")
+    parser.add_argument("--n-jobs", type=int, default=-1,
+                        help="Parallel jobs for forests and SVM calibration")
+    parser.add_argument("--calibration-folds", type=int, default=3)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument(
         "--output-dir", type=Path, default=Path("runs/baseline")
@@ -395,10 +341,17 @@ def main():
     parser.add_argument(
         "--selection-metric", choices=("loss", "pr_auc", "roc_auc"), default="pr_auc"
     )
-    parser.add_argument("--no-balanced-sampler", action="store_true")
+    parser.add_argument("--no-balanced-sampler", "--no-class-weight",
+                        dest="no_balanced_sampler", action="store_true")
     parser.add_argument("--device", choices=("auto",
                         "cpu", "cuda"), default="auto")
     args = parser.parse_args()
+    if args.n_jobs == 0:
+        parser.error("--n-jobs cannot be zero")
+    if args.calibration_folds < 2:
+        parser.error("--calibration-folds must be at least two")
+    if args.model == "mil" and args.model_params:
+        parser.error("--model-params is for classical models")
     for name in (
         "epochs",
         "eval_iterations",
@@ -444,6 +397,7 @@ def main():
     summary = {}
     for number, sites in tables.items():
         sites["dataset"] = number
+        sites["row_id"] = np.arange(len(sites))
         sites.to_csv(run_dir / f"dataset{number}_splits.csv", index=False)
         summary[str(number)] = (
             sites.groupby("split")["label"].agg(
@@ -452,6 +406,7 @@ def main():
         print(
             f"data{number} split summary: {summary[str(number)]}", flush=True)
     run_info = {
+        "model": args.model,
         "seed": args.seed,
         "split_ratios": ratios,
         "datasets": selected,
@@ -482,6 +437,12 @@ def main():
             "Validation has one binary class; choose --selection-metric loss")
     read_maps = open_read_maps(prepared, pd.concat(
         tables.values(), ignore_index=True))
+    if args.model != "mil":
+        from classical_models import train_classical
+        train_classical(args, prepared, tables, partitions,
+                        read_maps, run_dir, run_info)
+        print("Saved outputs to:", run_dir.resolve())
+        return
     device = torch.device(
         "cuda"
         if args.device == "auto" and torch.cuda.is_available()
@@ -531,22 +492,8 @@ def main():
         )
         final_metrics[name] = metrics
         print_metrics(f"Selected epoch {best_epoch} {name}", metrics)
-        predictions = partitions[name][
-            ["dataset", "transcript_id", "transcript_position", "label", "split"]
-        ].copy()
-        predictions["score"] = scores
-        for number in sorted(predictions["dataset"].unique()):
-            predictions[predictions["dataset"] == number].to_csv(
-                run_dir / f"dataset{number}_{name}_predictions.csv", index=False
-            )
-        for dataset, values in [
-            ("pooled", metrics["pooled"]),
-            *metrics["datasets"].items(),
-        ]:
-            metric_rows.append(
-                {"split": name, "dataset": dataset,
-                    "pooling": "noisy_or", **values}
-            )
+        export_predictions(run_dir, name, partitions[name], scores)
+        metric_rows.extend(metric_records(name, metrics, "noisy_or"))
     pd.DataFrame(metric_rows).to_csv(run_dir / "metrics.csv", index=False)
     (run_dir / "metrics.json").write_text(
         json.dumps(final_metrics, indent=2, allow_nan=False)

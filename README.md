@@ -1,41 +1,58 @@
-# m6A site classifier
+# m6A site classifiers
 
-A m6Anet-inspired multiple instance learning (MIL) model with nine features per read, sequence embeddings, and noisy-OR pooling. All targets are binary; data2 labels are converted using `label > 0`.
+Compare a m6Anet-inspired MIL model with Extra Trees, random forest, histogram gradient boosting, logistic regression, and exact RBF SVM. Each predicts a site-level modification probability. Data2 labels are binarized with `label > 0`.
 
 ## Run
 
 ```bash
 uv sync --locked
-# Run each training variant against the same validation and test sets.
-uv run python train.py --data-dir data --train-datasets 0 --output-dir runs/data0 --cache-dir runs/cache
-uv run python train.py --data-dir data --train-datasets 1 --output-dir runs/data1 --cache-dir runs/cache
-uv run python train.py --data-dir data --train-datasets 0 1 --output-dir runs/combined --cache-dir runs/cache
+# MIL is the default. Repeat with --train-datasets 1 or --train-datasets 0 1.
+uv run python train.py --data-dir data --train-datasets 0 --output-dir runs/mil_data0 --cache-dir runs/cache
+# Choose extra_trees, random_forest, gradient_boosting, logistic_regression, or rbf_svm.
+uv run python train.py --data-dir data --model extra_trees --train-datasets 0 --output-dir runs/et_data0 --cache-dir runs/cache
 ```
 
-Expected files: `data/dataN/datasetN.json` and `data/dataN/data.info`. Data0 uses `data.info.labelled` instead. New data3, data4, etc. follow the same convention and require binary labels.
+Files follow `data/dataN/datasetN.json` and `data/dataN/data.info`; data0 uses `data.info.labelled`. Future data3/data4 folders follow the same convention and require binary labels.
 
-## Dataset selection
+## Shared splits and evaluation
 
-- Each dataset is split independently into stratified 70/15/15 train/validation/test rows. Transcript and gene IDs do not constrain splitting. Matching sites across datasets remain independent.
-- Splits depend on the seed (default 42), dataset number, row order, labels, and ratios, never on which training variant is selected. Keep these inputs fixed for comparisons.
-- `--train-datasets` defaults to `0 1`. Combined training uses the same training rows as the individual variants.
-- `--val-datasets` defaults to `0 1`; `--test-datasets` defaults to `0 1 2`. These stay fixed across training variants. Metrics include pooled and individual dataset results. Pooled test includes data2.
-- Data2 always uses 100% test rows and cannot be selected for training or validation.
-- `--split-ratios 0.7 0.15 0.15` changes the default ratios for datasets other than data2. Integer row counts may require rounding. Very small classes may not support stratification.
-- `--dataset-splits splits.json` overrides ratios per dataset, for example `{"0": [1, 0, 0], "1": [1, 0, 0]}` for final training on all data0/data1 rows:
+- Independent, stratified 70/15/15 row splits per dataset. Transcript and gene IDs do not constrain splitting; matching sites across datasets remain independent.
+- `--train-datasets` defaults to `0 1`; `--val-datasets` to `0 1`; `--test-datasets` to `0 1 2`. Changing the training selection keeps validation/test rows fixed. Preserve the seed (default 42), inputs, row order, and ratios when comparing models.
+- Data2 always uses 100% test rows and cannot train or select models. Test evaluation follows model selection.
+- All models report BCE, trapezoidal PR AUC, and ROC AUC, pooled and per dataset. Pooled means the datasets selected for that split, so train pooled equals train data0 when training only on data0. Single-class AUCs are null.
+- Change default proportions with `--split-ratios`; override individual datasets with `--dataset-splits splits.json`. Integer counts require rounding; small classes may not support stratification. `--split-only` exports assignments without loading features.
+
+For final training, put `{"0": [1, 0, 0], "1": [1, 0, 0]}` in `splits.json`:
 
 ```bash
-uv run python train.py --data-dir data --dataset-splits splits.json --train-datasets 0 1 --val-datasets --test-datasets 2
+uv run python train.py --data-dir data --model logistic_regression --dataset-splits splits.json --train-datasets 0 1 --val-datasets --test-datasets 2
 ```
 
-With no validation datasets, the final epoch is saved. Use `--split-only` to export assignments without loading features or training. Assignment files include all partitions for each loaded dataset; the dataset selectors determine which partitions are actually used.
+Without validation, MIL saves the final epoch; classical models fit one fixed parameter configuration.
 
-## Training and outputs
+## Classical models
 
-Defaults: 10 epochs, batch size 256, 20 reads per bag, and 5 evaluation iterations. Normalization uses training reads only. Inverse-class-frequency sampling is enabled; disable with `--no-balanced-sampler`.
+All use the same **65 features**, computed once over all reads per site and cached:
 
-Checkpoint selection uses pooled validation PR AUC (`--selection-metric loss` or `roc_auc` also supported). Tests run after checkpoint selection. Every dataset uses the same sampled-bag noisy-OR evaluation with BCE, PR AUC, and ROC AUC. Single-class AUCs are null. There is no fraction regression evaluation.
+- 36 numeric summaries: mean, population standard deviation (`ddof=0`), 25th and 75th percentiles (linear interpolation) for each of nine channels.
+- 28 position-specific A/C/G/T one-hot features for the 7-mer. Other bases raise an error.
+- `log1p(n_reads)` using the natural logarithm.
 
-Each timestamped output directory contains split CSVs, settings and split counts in `run_info.json`, checkpoint weights and normalization in `best_model.pt`, epoch history and training curves, final metrics, and per-dataset prediction CSVs. `--cache-dir` shares prepared features across runs.
+Logistic regression and SVM standardize numeric features using training rows only; one-hot columns pass through. Trees use unscaled features. Balanced class weights default on; `--no-class-weight` disables them (alias of `--no-balanced-sampler`). SVM uses sigmoid calibration from training-only stratified folds (`--calibration-folds 3`), with preprocessing fitted inside each fold and a final base model fitted on all training rows. Calibration uses natural class frequencies.
+
+Defaults: 300 trees for forests, 100 boosting iterations with internal early stopping disabled, L2 logistic regression, and exact RBF SVM. `--n-jobs` controls forest/calibration parallelism. Exact SVM can be slow on these datasets; it never automatically subsamples or substitutes an approximation.
+
+Use `--model-params params.json` for estimator parameters, such as `{"n_estimators": 500, "max_depth": 20}` for a forest. A list of objects runs candidate configurations and selects by pooled validation PR AUC (`--selection-metric loss` or `roc_auc` also supported). A single object fits one configuration. Balancing, seeds, jobs, SVM kernel/probability handling, and internal early stopping are controlled by the runner.
+
+These summaries use all reads, whereas MIL uses sampled read bags. The site splits match, but the representations differ. Feature ablations and ensemble fitting are future experiments; ensemble weights must be learned from held-out or out-of-fold predictions, never test results.
+
+## MIL and outputs
+
+MIL defaults: 10 epochs, batch size 256, 20 reads per bag, and 5 evaluation iterations. Training-only normalization, balanced sampling, and noisy-OR pooling are used. The checkpoint with the best pooled validation PR AUC is selected.
+
+Each timestamped run saves split assignments, `run_info.json`, `metrics.json`/`.csv`, and per-dataset prediction CSVs. Predictions include `dataset`, source `row_id`, transcript/position, binary label, split, and `score`. Use `(dataset, row_id)` to align identical source datasets for future ensembles. Assignment files include unused partitions; dataset selectors determine actual usage.
+
+- **MIL:** `best_model.pt`, epoch history, and training curves.
+- **Classical:** `best_model.joblib` (estimator including preprocessing/calibration), `feature_names.json`, and `search_history.json`. Logged settings include resolved parameters and the scikit-learn version. Saved classical estimators accept matrices in the documented feature order and expose `predict_proba`.
 
 Run checks with `uv run python -m unittest discover -s tests`.
