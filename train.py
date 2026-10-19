@@ -147,6 +147,10 @@ def train_baseline_model(
     iterations,
     selection_metric,
     log_every_batches=100,
+    epoch_callback=None,
+    evaluate_train=True,
+    plot_curves=True,
+    evaluation_seed=None,
 ):
     set_seed(seed)
     model = M6ANetInspiredMIL(
@@ -195,7 +199,7 @@ def train_baseline_model(
                 )
         # Natural, unweighted site distributions are used for all reported metrics.
         epoch_metrics = {}
-        for name in ("train", "val"):
+        for name in (("train", "val") if evaluate_train else ("val",)):
             if partitions[name].empty:
                 continue
             _, metrics = evaluate_partition(
@@ -207,7 +211,8 @@ def train_baseline_model(
                 params,
                 device,
                 iterations,
-                seed + SPLITS.index(name),
+                (seed if evaluation_seed is None else evaluation_seed) +
+                SPLITS.index(name),
             )
             epoch_metrics[name] = metrics
             print_metrics(f"Epoch {epoch} {name}", metrics)
@@ -252,7 +257,10 @@ def train_baseline_model(
         (output_dir / "history.json").write_text(
             json.dumps(history, indent=2, allow_nan=False)
         )
-    save_curves(history, output_dir, best_epoch)
+        if epoch_callback is not None:
+            epoch_callback(epoch, epoch_metrics, best_value)
+    if plot_curves:
+        save_curves(history, output_dir, best_epoch)
     model.load_state_dict(best_state)
     return model, best_epoch, best_value
 

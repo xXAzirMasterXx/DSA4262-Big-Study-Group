@@ -46,6 +46,22 @@ Use `--model-params params.json` for estimator parameters, such as `{"n_estimato
 
 These summaries use all reads, whereas MIL uses sampled read bags. The site splits match, but the representations differ. Feature ablations and ensemble fitting are future experiments; ensemble weights must be learned from held-out or out-of-fold predictions, never test results.
 
+## Hyperparameter tuning
+
+Optuna tunes each model and training source independently, using the same fixed validation rows. Search ranges and default budgets are in `configs/tuning.json`.
+
+```bash
+uv sync --locked --group tuning
+# Tune one model on combined training; repeat the same command to resume.
+uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data01
+# Tune all models on all three training variants, sequentially.
+uv run --locked --group tuning python tune.py --data-dir data
+```
+
+The baseline is trial zero. Budgets default to 30 trials for forests, boosting and logistic regression, 10 for SVM, and 15 for MIL. `--trials` sets the total budget per study; `--timeout` stops new trials after a time budget but cannot interrupt an ongoing fit. MIL supports epoch pruning; exact SVM retains training-only calibration.
+
+Studies save locally under `runs/tuning/`, including a database, trial CSV, best settings and winning model. Tests run only after selecting a winner; use `--no-final-eval` to defer them. Separate split/model/search seeds preserve comparison rows. See [tuning details](docs/tuning.md) for settings, resume behavior, artifacts and the local dashboard.
+
 ## MIL and outputs
 
 MIL defaults: 10 epochs, batch size 256, 20 reads per bag, and 5 evaluation iterations. Training-only normalization, balanced sampling, and noisy-OR pooling are used. The checkpoint with the best pooled validation PR AUC is selected.
@@ -55,4 +71,4 @@ Each timestamped run saves split assignments, `run_info.json`, `metrics.json`/`.
 - **MIL:** `best_model.pt`, epoch history, and training curves.
 - **Classical:** `best_model.joblib` (estimator including preprocessing/calibration), `feature_names.json`, and `search_history.json`. Logged settings include resolved parameters and the scikit-learn version. Saved classical estimators accept matrices in the documented feature order and expose `predict_proba`.
 
-Run checks with `uv run python -m unittest discover -s tests`.
+Run all checks with `uv run --locked --group tuning python -m unittest discover -s tests`.

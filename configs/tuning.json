@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "models": {
+    "extra_trees": {
+      "trials": 30,
+      "baseline": {
+        "n_estimators": 300,
+        "max_depth": null,
+        "min_samples_leaf": 1,
+        "max_features": "sqrt"
+      },
+      "space": {
+        "n_estimators": {
+          "type": "int",
+          "low": 200,
+          "high": 800,
+          "step": 100
+        },
+        "max_depth": {
+          "type": "categorical",
+          "choices": [
+            null,
+            10,
+            20,
+            40
+          ]
+        },
+        "min_samples_leaf": {
+          "type": "int",
+          "low": 1,
+          "high": 20
+        },
+        "max_features": {
+          "type": "categorical",
+          "choices": [
+            "sqrt",
+            0.5,
+            1.0
+          ]
+        }
+      }
+    },
+    "random_forest": {
+      "trials": 30,
+      "baseline": {
+        "n_estimators": 300,
+        "max_depth": null,
+        "min_samples_leaf": 1,
+        "max_features": "sqrt"
+      },
+      "space": {
+        "n_estimators": {
+          "type": "int",
+          "low": 200,
+          "high": 800,
+          "step": 100
+        },
+        "max_depth": {
+          "type": "categorical",
+          "choices": [
+            null,
+            10,
+            20,
+            40
+          ]
+        },
+        "min_samples_leaf": {
+          "type": "int",
+          "low": 1,
+          "high": 20
+        },
+        "max_features": {
+          "type": "categorical",
+          "choices": [
+            "sqrt",
+            0.5,
+            1.0
+          ]
+        }
+      }
+    },
+    "gradient_boosting": {
+      "trials": 30,
+      "baseline": {
+        "learning_rate": 0.1,
+        "max_iter": 100,
+        "max_leaf_nodes": 31,
+        "min_samples_leaf": 20,
+        "l2_regularization": 0.0
+      },
+      "space": {
+        "learning_rate": {
+          "type": "float",
+          "low": 0.01,
+          "high": 0.2,
+          "log": true
+        },
+        "max_iter": {
+          "type": "int",
+          "low": 100,
+          "high": 500,
+          "step": 50
+        },
+        "max_leaf_nodes": {
+          "type": "int",
+          "low": 7,
+          "high": 63
+        },
+        "min_samples_leaf": {
+          "type": "int",
+          "low": 10,
+          "high": 100
+        },
+        "l2_regularization": {
+          "type": "float_or",
+          "choices": [
+            0.0
+          ],
+          "low": 0.0001,
+          "high": 10.0,
+          "log": true
+        }
+      }
+    },
+    "logistic_regression": {
+      "trials": 30,
+      "baseline": {
+        "C": 1.0
+      },
+      "space": {
+        "C": {
+          "type": "float",
+          "low": 0.0001,
+          "high": 100.0,
+          "log": true
+        }
+      }
+    },
+    "rbf_svm": {
+      "trials": 10,
+      "baseline": {
+        "C": 1.0,
+        "gamma": "scale"
+      },
+      "space": {
+        "C": {
+          "type": "float",
+          "low": 0.01,
+          "high": 100.0,
+          "log": true
+        },
+        "gamma": {
+          "type": "float_or",
+          "choices": [
+            "scale"
+          ],
+          "low": 0.0001,
+          "high": 1.0,
+          "log": true
+        }
+      }
+    },
+    "mil": {
+      "trials": 15,
+      "baseline_epochs": 10,
+      "max_epochs": 30,
+      "baseline": {
+        "learning_rate": 0.001,
+        "weight_decay": 0.00001,
+        "hidden_dim": 150,
+        "embed_dim": 2,
+        "dropout": 0.1
+      },
+      "space": {
+        "learning_rate": {
+          "type": "float",
+          "low": 0.0001,
+          "high": 0.003,
+          "log": true
+        },
+        "weight_decay": {
+          "type": "float_or",
+          "choices": [
+            0.0
+          ],
+          "low": 0.000001,
+          "high": 0.001,
+          "log": true
+        },
+        "hidden_dim": {
+          "type": "categorical",
+          "choices": [
+            64,
+            128,
+            150,
+            256
+          ]
+        },
+        "embed_dim": {
+          "type": "categorical",
+          "choices": [
+            2,
+            4,
+            8
+          ]
+        },
+        "dropout": {
+          "type": "float",
+          "low": 0.0,
+          "high": 0.5
+        }
+      }
+    }
+  }
+}

@@ -16,3 +16,9 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+tuning = [
+    "optuna>=4.5,<6",
+    "optuna-dashboard>=0.20,<1",
+]
