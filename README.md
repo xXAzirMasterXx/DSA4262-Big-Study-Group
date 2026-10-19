@@ -25,9 +25,9 @@ Keep `.python-version` and `uv.lock` unchanged to reproduce the environment. `uv
 Six pretrained models are included under `models/`, using the combined data0/data1 training partitions. These are the completed baseline runs, not Optuna winners. Install [Git LFS](https://git-lfs.com/) using its official Linux instructions, then fetch the weights inside the clone:
 
 ```bash
-git lfs version
-git lfs install
-git lfs pull
+sudo apt install git-lfs
+git-lfs version
+git-lfs pull
 ```
 
 Put your uncompressed feature JSON at `data/new/dataset.json` (or pass its actual path). No labels or metadata CSV are required. This must contain precomputed read features, not raw sequencing files. See [input format and dataset preparation](docs/data.md).
