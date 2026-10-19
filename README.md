@@ -34,14 +34,14 @@ Put your uncompressed feature JSON at `data/new/dataset.json` (or pass its actua
 
 Choose a model folder:
 
-| Model | Folder |
-| --- | --- |
-| MIL | `models/mil_data01` |
-| Extra Trees | `models/extra_trees_data01` |
-| Random forest | `models/random_forest_data01` |
-| Histogram gradient boosting | `models/gradient_boosting_data01` |
-| Logistic regression | `models/logistic_regression_data01` |
-| RBF SVM | `models/rbf_svm_data01` |
+| Model                       | Folder                              |
+| --------------------------- | ----------------------------------- |
+| MIL                         | `models/mil_data01`                 |
+| Extra Trees                 | `models/extra_trees_data01`         |
+| Random forest               | `models/random_forest_data01`       |
+| Histogram gradient boosting | `models/gradient_boosting_data01`   |
+| Logistic regression         | `models/logistic_regression_data01` |
+| RBF SVM                     | `models/rbf_svm_data01`             |
 
 Run inference:
 
@@ -50,9 +50,21 @@ uv run --locked python predict.py --model-dir models/extra_trees_data01 --input 
 # Use --model-dir models/mil_data01 for the packaged MIL model.
 ```
 
+When `data.info.labelled` or `data.info` beside the input contains labels, inference automatically prints ROC AUC and PR AUC and saves them in the companion JSON (`predictions/new.csv.json`). This works with the course datasets:
+
+```bash
+uv run --locked python predict.py --model-dir models/extra_trees_data01 --input data/data2/dataset2.json --output predictions/data2.csv
+# For data0/data1, use data/data0/dataset0.json or data/data1/dataset1.json.
+# For custom labels, add --labels /path/to/labels.csv; disable evaluation with --no-labels.
+```
+
+Metrics match labels by transcript ID and position, using `label > 0` as the binary target (including data2).
+
 - Only the model folder and feature JSON are needed. No fitting, labels or training data are required.
 - Output contains dataset name, row ID, transcript ID, position, read count and `score` (modification probability). A companion JSON records model checksum and inference settings. Existing outputs are never overwritten.
 - Classical models reuse saved preprocessing/calibration and all reads. MIL reuses saved normalization and averages sampled read bags; `--seed` and `--eval-iterations` override packaged defaults. Keep input order and settings fixed for repeatability. Its per-site sampling differs from training-time evaluation, so scores can differ from run prediction files.
 - Use only trusted model folders: loading joblib artifacts can execute Python code. Checksums detect changed files, not trustworthiness.
 
 For training, hyperparameter tuning, custom splits and model export, see the [training guide](docs/training.md).
+
+For custom evaluation labels, see the [labels.csv format and example](docs/data.md#custom-inference-labels).

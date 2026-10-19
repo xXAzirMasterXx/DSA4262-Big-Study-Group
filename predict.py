@@ -1,14 +1,16 @@
-"""Predict site modification probabilities from an unlabeled feature JSON."""
+"""Predict site modification probabilities from a feature JSON, with optional label-based evaluation."""
 import argparse
 import csv
 import json
 from pathlib import Path
 import tempfile
 
+import pandas as pd
 import numpy as np
 import torch
 
 from data_prep import iter_feature_sites
+from evaluation import compute_metrics
 from mil_model import encode_5mer
 from model_bundle import load_bundle
 from site_features import summarize_site
@@ -47,8 +49,43 @@ def sample_bags(reads, row_id, seed, iterations, params, mean, std):
     return np.stack(bags).astype(np.float32)
 
 
+def load_labels(input_path, labels_path=None, no_labels=False):
+    """Discover course metadata or read an explicit CSV; align by site key."""
+    if no_labels:
+        if labels_path is not None:
+            raise ValueError("Cannot combine labels_path with no_labels")
+        return None, None
+    if labels_path is None:
+        candidates = [input_path.parent /
+                      name for name in ("data.info.labelled", "data.info")]
+        labels_path = next(
+            (path for path in candidates if path.is_file()), None)
+        if labels_path is None:
+            return None, None
+        frame = pd.read_csv(labels_path, dtype={"transcript_id": str})
+        if "label" not in frame.columns:
+            return None, None
+    else:
+        labels_path = Path(labels_path)
+        frame = pd.read_csv(labels_path, dtype={"transcript_id": str})
+    required = {"transcript_id", "transcript_position", "label"}
+    if not required.issubset(frame.columns):
+        raise ValueError(f"Label CSV must contain {sorted(required)}")
+    positions = pd.to_numeric(frame["transcript_position"], errors="raise")
+    targets = pd.to_numeric(frame["label"], errors="raise")
+    if (frame["transcript_id"].isna().any() or not np.isfinite(positions).all()
+            or (positions % 1 != 0).any()):
+        raise ValueError("Label CSV contains invalid transcript/site keys")
+    if not np.isfinite(targets).all() or (targets < 0).any():
+        raise ValueError("Labels must be finite and nonnegative")
+    keys = list(zip(frame["transcript_id"], positions.astype(int)))
+    if len(set(keys)) != len(keys):
+        raise ValueError("Duplicate site keys in label CSV")
+    return dict(zip(keys, (targets > 0).astype(int))), labels_path
+
+
 def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
-            seed=None, iterations=None, dataset_name=None):
+            seed=None, iterations=None, dataset_name=None, labels_path=None, no_labels=False):
     input_path, output_path = Path(input_path), Path(output_path)
     sidecar = output_path.with_suffix(output_path.suffix + ".json")
     if batch_size < 1:
@@ -58,6 +95,8 @@ def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
             "Prediction output already exists; choose a new output filename")
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA requested but unavailable; use --device cpu")
+    labels, label_source = load_labels(input_path, labels_path, no_labels)
+    evaluated_labels, evaluated_scores = [], []
     manifest, payload, fitted = load_bundle(model_dir, device)
     seed = manifest["inference_defaults"]["seed"] if seed is None else seed
     iterations = manifest["inference_defaults"]["eval_iterations"] if iterations is None else iterations
@@ -74,7 +113,7 @@ def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
             temporary = Path(stream.name)
             writer = csv.writer(stream)
             writer.writerow(["dataset", "row_id", "transcript_id",
-                            "transcript_position", "n_reads", "score"])
+                            "transcript_position", "n_reads", "score"] + (["label"] if labels is not None else []))
             batch, metadata, kmers = [], [], []
             if manifest["kind"] == "mil":
                 mean = payload["feature_mean"].numpy()
@@ -98,8 +137,15 @@ def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
                     scores /= iterations
                 if not np.isfinite(scores).all() or ((scores < 0) | (scores > 1)).any():
                     raise ValueError("Model produced invalid probabilities")
-                writer.writerows([*meta, float(score)]
-                                 for meta, score in zip(metadata, scores))
+                for meta, score in zip(metadata, scores):
+                    row = [*meta, float(score)]
+                    if labels is not None:
+                        label = labels.get((meta[2], meta[3]))
+                        row.append(label)
+                        if label is not None:
+                            evaluated_labels.append(label)
+                            evaluated_scores.append(float(score))
+                    writer.writerow(row)
                 batch.clear()
                 metadata.clear()
                 kmers.clear()
@@ -130,6 +176,19 @@ def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
             "eval_iterations": iterations if manifest["kind"] == "mil" else None,
             "sampling": "per_site_iteration_seed_v1" if manifest["kind"] == "mil" else "all_reads",
         }
+        if labels is not None:
+            if not evaluated_labels:
+                raise ValueError(
+                    "No label CSV sites matched the input feature sites")
+            metrics = compute_metrics(evaluated_labels, evaluated_scores)
+            metrics.pop("loss")
+            metadata["metrics"] = metrics
+            metadata["labels"] = {
+                "path": str(label_source.resolve()), "rule": "label > 0",
+                "metadata_sites": len(labels), "matched_sites": len(evaluated_labels),
+                "unlabeled_prediction_sites": count - len(evaluated_labels),
+                "metadata_sites_without_predictions": len(labels) - len(evaluated_labels),
+            }
         temporary.replace(output_path)
         sidecar.write_text(json.dumps(metadata, indent=2, allow_nan=False))
     finally:
@@ -150,10 +209,25 @@ def main():
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--seed", type=int)
     parser.add_argument("--eval-iterations", type=int)
+    label_options = parser.add_mutually_exclusive_group()
+    label_options.add_argument("--labels", type=Path,
+                               help="Label CSV; defaults to adjacent data.info.labelled or data.info")
+    label_options.add_argument(
+        "--no-labels", action="store_true", help="Disable label discovery/evaluation")
     args = parser.parse_args()
     count = predict(args.model_dir, args.input, args.output, args.batch_size, args.device,
-                    args.seed, args.eval_iterations, args.dataset_name)
+                    args.seed, args.eval_iterations, args.dataset_name, args.labels, args.no_labels)
     print(f"Saved {count:,} predictions to {args.output}")
+    summary = json.loads(args.output.with_suffix(
+        args.output.suffix + ".json").read_text())
+    if "metrics" in summary:
+        metrics = summary["metrics"]
+        print(
+            f"Evaluated {metrics['sites']:,} labeled sites out of {count:,} predictions")
+        for name in ("roc_auc", "pr_auc"):
+            value = metrics[name]
+            print(f"{name.upper()}: {value:.6f}" if value is not None else
+                  f"{name.upper()}: N/A ({metrics['auc_unavailable_reason']})")
 
 
 if __name__ == "__main__":

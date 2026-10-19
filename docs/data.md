@@ -62,3 +62,25 @@ uv run --locked python predict.py --model-dir models/extra_trees_data01 --input 
 ```
 
 This requires an exported model folder. No metadata CSV or labels are needed. You can also pass a course feature JSON directly. Use `--dataset-name` to set the output dataset identifier; otherwise it is the input filename stem. Scores are probabilities, not thresholded labels.
+
+## Custom inference labels
+
+To calculate ROC AUC and PR AUC, supply a CSV with a header and these required columns:
+
+```csv
+transcript_id,transcript_position,label
+transcript_example,100,0
+transcript_example,101,1
+```
+
+- `transcript_id` must match the feature JSON transcript ID exactly.
+- `transcript_position` must be an integer matching the JSON site position. Each transcript/position pair must be unique in the CSV.
+- `label` should be `0` (unmodified) or `1` (modified). Inference also accepts finite nonnegative numeric labels and converts every value greater than zero to `1`, as for data2. Missing, negative and nonnumeric labels are rejected.
+- Row order does not matter: labels are matched by transcript ID and position. Extra columns are ignored.
+- You can label a subset of sites. Metrics use only matching labeled sites; coverage and unmatched counts are recorded in the companion JSON. No matches cause an error. Both binary classes are needed for AUCs; otherwise they are saved as null with an explanation.
+
+```bash
+uv run --locked python predict.py --model-dir models/extra_trees_data01 --input data/new/dataset.json --labels data/new/labels.csv --output predictions/new.csv
+```
+
+A file named `labels.csv` requires `--labels`. For automatic discovery, name it `data.info.labelled` or `data.info` and place it beside the feature JSON. Use `--no-labels` to skip automatic evaluation.

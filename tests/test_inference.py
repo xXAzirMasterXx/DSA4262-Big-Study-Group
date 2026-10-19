@@ -53,6 +53,54 @@ class InferenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already exists"):
             predict(bundle, self.input, output)
 
+    def test_course_metadata_metrics_align_by_key(self):
+        bundle, _, _ = self.classical_bundle()
+        for dataset, filename, positive in [(0, "data.info.labelled", 1),
+                                            (1, "data.info", 1), (2, "data.info", 0.25)]:
+            with self.subTest(dataset=dataset):
+                folder = self.root / f"data{dataset}"
+                folder.mkdir()
+                features = folder / f"dataset{dataset}.json"
+                features.write_text(self.input.read_text())
+                (folder / filename).write_text(
+                    f"transcript_id,transcript_position,label\ntx,2,{positive}\ntx,1,0\n")
+                output = folder / "scores.csv"
+                predict(bundle, features, output)
+                self.assertEqual(pd.read_csv(output).label.tolist(), [0, 1])
+                metrics = json.loads(output.with_suffix(
+                    ".csv.json").read_text())["metrics"]
+                self.assertAlmostEqual(metrics["roc_auc"], 1.0)
+                self.assertAlmostEqual(metrics["pr_auc"], 1.0)
+
+    def test_partial_labels_and_single_class(self):
+        bundle, _, _ = self.classical_bundle()
+        labels = self.root / "labels.csv"
+        labels.write_text(
+            "transcript_id,transcript_position,label\ntx,2,1\ntx,99,0\n")
+        output = self.root / "scores.csv"
+        predict(bundle, self.input, output, labels_path=labels)
+        summary = json.loads(output.with_suffix(".csv.json").read_text())
+        self.assertIsNone(summary["metrics"]["roc_auc"])
+        self.assertIsNone(summary["metrics"]["pr_auc"])
+        self.assertEqual(summary["labels"]["unlabeled_prediction_sites"], 1)
+        self.assertEqual(summary["labels"]
+                         ["metadata_sites_without_predictions"], 1)
+
+    def test_label_validation_and_opt_out(self):
+        bundle, _, _ = self.classical_bundle()
+        labels = self.root / "data.info"
+        output = self.root / "scores.csv"
+        for rows in ("tx,1,0\ntx,1,1", "tx,1,-1", "tx,1,nan", "other,1,1"):
+            labels.write_text(
+                "transcript_id,transcript_position,label\n" + rows + "\n")
+            with self.assertRaises(ValueError):
+                predict(bundle, self.input, output)
+            self.assertFalse(output.exists())
+        predict(bundle, self.input, output, no_labels=True)
+        self.assertNotIn("label", pd.read_csv(output).columns)
+        self.assertNotIn("metrics", json.loads(
+            output.with_suffix(".csv.json").read_text()))
+
     def test_corruption_and_lfs_pointer(self):
         bundle, _, _ = self.classical_bundle()
         artifact = bundle / "model.joblib"
