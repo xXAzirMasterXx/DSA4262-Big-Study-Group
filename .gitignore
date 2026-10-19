@@ -10,3 +10,6 @@
 
 # Provided datasets and extracted feature JSON files
 /data/
+
+# Generated inference outputs
+/predictions/

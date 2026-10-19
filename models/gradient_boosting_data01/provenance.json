@@ -1,0 +1,42 @@
+{
+  "trained_on_datasets": [
+    0,
+    1
+  ],
+  "datasets": {
+    "train": [
+      0,
+      1
+    ],
+    "val": [
+      0,
+      1
+    ],
+    "test": [
+      0,
+      1,
+      2
+    ]
+  },
+  "split_ratios": {
+    "0": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "1": [
+      0.7,
+      0.15,
+      0.15
+    ],
+    "2": [
+      0,
+      0,
+      1
+    ]
+  },
+  "seed": 42,
+  "best_validation_value": 0.4286241891217815,
+  "model_parameters": {},
+  "balanced_class_weights": true
+}
