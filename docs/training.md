@@ -29,14 +29,12 @@ Files follow `data/dataN/datasetN.json` and `data/dataN/data.info`; data0 uses `
 ## Shared splits and evaluation
 
 - Independent, stratified 70/15/15 row splits per dataset. Transcript and gene IDs do not constrain splitting; matching sites across datasets remain independent.
-- `--train-datasets` defaults to `0 1`; `--val-datasets` to `0 1`; `--test-datasets` to `0 1 2`. Changing the training selection keeps validation/test rows fixed. Preserve the seed (default 42), inputs, row order, and ratios when comparing models.
+- `--train-datasets` defaults to `0 1`; `--val-datasets` to `0 1`; `--test-datasets` to `0 1 2`. Changing the training selection keeps validation/test rows fixed.
 - Data2 always uses 100% test rows and cannot train or select models. Test evaluation follows model selection.
 - All models report BCE, trapezoidal PR AUC, and ROC AUC, pooled and per dataset. Pooled means the datasets selected for that split, so train pooled equals train data0 when training only on data0. Single-class AUCs are null.
 - Change default proportions with `--split-ratios`; override individual datasets with `--dataset-splits configs/final_splits.json`. Integer counts require rounding; small classes may not support stratification. `--split-only` exports assignments without loading features.
 
-For final training, use the included `configs/final_splits.json`, which assigns all data0/data1 rows to training:
-
-Run this command from the repository root.
+For final training, use the included `configs/final_splits.json`, which assigns all data0 + data1 rows to training, with no validation and all data2 rows to testing:
 
 ```bash
 uv run --locked python train.py --data-dir data --model logistic_regression --dataset-splits configs/final_splits.json --train-datasets 0 1 --val-datasets --test-datasets 2 --n-jobs 8 --threads 8
@@ -70,16 +68,10 @@ Run this command from the repository root.
 uv sync --locked --group tuning
 ```
 
-Tune one model on combined training; repeat the same command to resume.
+Tune one model on combined training (data0 + data1); repeat the same command to resume.
 
 ```bash
 uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data01 --n-jobs 8 --threads 8
-```
-
-Tune all models on all three training variants, sequentially.
-
-```bash
-uv run --locked --group tuning python tune.py --data-dir data --n-jobs 8 --threads 8
 ```
 
 The baseline is trial zero. Budgets default to 30 trials for forests, boosting and logistic regression, 10 for SVM, and 15 for MIL. `--trials` sets the total budget per study; `--timeout` stops new trials after a time budget but cannot interrupt an ongoing fit. MIL supports epoch pruning; exact SVM retains training-only calibration.

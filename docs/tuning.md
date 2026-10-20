@@ -10,13 +10,13 @@ Run this command from the repository root.
 uv sync --locked --group tuning
 ```
 
-One model, one training source
+One model, one training source (data0)
 
 ```bash
 uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data0 --n-jobs 8 --threads 8
 ```
 
-All six models on data0, data1 and combined, sequentially
+All six models on data0, data1 and data0 + data1, sequentially
 
 ```bash
 uv run --locked --group tuning python tune.py --data-dir data --n-jobs 8 --threads 8

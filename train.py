@@ -354,7 +354,8 @@ def main():
                         dest="no_balanced_sampler", action="store_true")
     parser.add_argument("--device", choices=("auto",
                         "cpu", "cuda"), default="auto")
-    parser.add_argument("--threads", type=int, help="BLAS/OpenMP/PyTorch CPU threads")
+    parser.add_argument("--threads", type=int,
+                        help="BLAS/OpenMP/PyTorch CPU threads")
     args = parser.parse_args()
     if args.threads is not None and args.threads < 1:
         parser.error("--threads must be positive")

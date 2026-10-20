@@ -1,6 +1,6 @@
 # Model folders
 
-The six `*_data01` folders contain the completed baseline models trained on the combined data0/data1 training partitions. They are not Optuna-selected models. Each manifest identifies its original run; provenance records dataset selections and splits. Preprocessing/calibration and MIL normalization are included.
+The six `*_data01` folders contain the completed baseline models trained on the combined data0/data1 training partitions. Each manifest identifies its original run; provenance records dataset selections and splits. Preprocessing/calibration and MIL normalization are included.
 
 Use `predict.py --model-dir models/extra_trees_data01` (or another model folder) as shown in the root README. Fetch binaries with `git lfs pull` after cloning.
 
