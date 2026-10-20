@@ -63,7 +63,7 @@ def prepare_one(
         "metadata_size": metadata_path.stat().st_size,
         "metadata_mtime_ns": metadata_path.stat().st_mtime_ns,
         "n_features": 9,
-        "cache_version": 5,
+        "cache_version": 7 if dataset_number == 2 else 5,
     }
     if manifest_path.exists() and sites_path.exists() and reads_path.exists():
         if json.loads(manifest_path.read_text(encoding="utf-8")) == signature:

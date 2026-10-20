@@ -18,6 +18,23 @@ from site_features import FEATURE_NAMES, summarize_site
 
 
 class InferenceTests(unittest.TestCase):
+    def test_data2_unmodified_positive_evaluation(self):
+        bundle, _, _ = self.classical_bundle()
+        labels = self.root / "labels.csv"
+        pd.DataFrame({"transcript_id": ["tx", "tx"],
+                      "transcript_position": [1, 2],
+                      "label": [0.75, 0.0]}).to_csv(labels, index=False)
+        output = self.root / "strict.csv"
+        predict(bundle, self.input, output,
+                dataset_name="data2", labels_path=labels)
+        self.assertEqual(pd.read_csv(output).label.tolist(), [1, 0])
+        metadata = json.loads(output.with_suffix(".csv.json").read_text())
+        self.assertEqual(metadata["labels"]["rule"], "label > 0")
+        self.assertEqual(metadata["metrics"]
+                         ["auc_target"], "original label == 0")
+        self.assertEqual(metadata["metrics"]
+                         ["auc_score"], "1 - modification score")
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -56,7 +73,7 @@ class InferenceTests(unittest.TestCase):
     def test_course_metadata_metrics_align_by_key(self):
         bundle, _, _ = self.classical_bundle()
         for dataset, filename, positive in [(0, "data.info.labelled", 1),
-                                            (1, "data.info", 1), (2, "data.info", 0.25)]:
+                                            (1, "data.info", 1), (2, "data.info", 1)]:
             with self.subTest(dataset=dataset):
                 folder = self.root / f"data{dataset}"
                 folder.mkdir()

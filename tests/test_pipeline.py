@@ -36,7 +36,7 @@ class PipelineTests(unittest.TestCase):
     def test_binary_data2(self):
         rows = normalize_labels(pd.DataFrame({'label': [0, 0.01, 0.5, 1]}), 2)
         self.assertEqual(rows.label.tolist(), [0, 1, 1, 1])
-        metrics = compute_metrics(rows.label, [0.1, 0.8, 0.9, 0.9])
+        metrics = compute_metrics(rows.label, [0.1, 0.8, 0.9, 1.0])
         self.assertEqual(metrics['roc_auc'], 1.0)
         self.assertNotIn('rmse', metrics)
         with self.assertRaises(ValueError):

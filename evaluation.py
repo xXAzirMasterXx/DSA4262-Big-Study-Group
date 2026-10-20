@@ -25,7 +25,7 @@ def compute_metrics(labels, scores):
         "roc_auc": None,
         "sites": int(len(labels)),
         "auc_positive_sites": int(binary.sum()),
-        "auc_target": "label > 0",
+        "auc_target": "binary label == 1",
         "auc_unavailable_reason": None,
     }
     if np.unique(binary).size < 2:
@@ -39,14 +39,24 @@ def compute_metrics(labels, scores):
     return metrics
 
 
+def data2_metrics(labels, scores):
+    """Evaluate unmodified sites as positive; inputs retain modification orientation."""
+    metrics = compute_metrics(1 - np.asarray(labels), 1 - np.asarray(scores))
+    metrics["auc_target"] = "original label == 0"
+    metrics["auc_score"] = "1 - modification score"
+    return metrics
+
+
 def partition_metrics(sites, scores):
     scores = np.asarray(scores)
     metrics = {"pooled": compute_metrics(
         sites["label"].to_numpy(), scores), "datasets": {}}
     for number in sorted(sites["dataset"].unique()):
         mask = sites["dataset"].to_numpy() == number
-        metrics["datasets"][str(number)] = compute_metrics(
+        evaluator = data2_metrics if number == 2 else compute_metrics
+        metrics["datasets"][str(number)] = evaluator(
             sites.loc[mask, "label"].to_numpy(), scores[mask])
+    metrics["pooled"]["auc_target"] = "label > 0 (modification-positive pooling)"
     return metrics
 
 

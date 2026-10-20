@@ -11,7 +11,7 @@ import torch
 from threadpoolctl import threadpool_limits
 
 from data_prep import iter_feature_sites
-from evaluation import compute_metrics
+from evaluation import compute_metrics, data2_metrics
 from mil_model import encode_5mer
 from model_bundle import load_bundle
 from site_features import summarize_site
@@ -96,6 +96,9 @@ def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
             "Prediction output already exists; choose a new output filename")
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA requested but unavailable; use --device cpu")
+    is_data2 = dataset_name in (
+        "2", "data2", "dataset2") or input_path.name == "dataset2.json" or input_path.parent.name == "data2"
+    label_rule = "label > 0"
     labels, label_source = load_labels(input_path, labels_path, no_labels)
     evaluated_labels, evaluated_scores = [], []
     manifest, payload, fitted = load_bundle(model_dir, device)
@@ -188,11 +191,12 @@ def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
             if not evaluated_labels:
                 raise ValueError(
                     "No label CSV sites matched the input feature sites")
-            metrics = compute_metrics(evaluated_labels, evaluated_scores)
+            evaluator = data2_metrics if is_data2 else compute_metrics
+            metrics = evaluator(evaluated_labels, evaluated_scores)
             metrics.pop("loss")
             metadata["metrics"] = metrics
             metadata["labels"] = {
-                "path": str(label_source.resolve()), "rule": "label > 0",
+                "path": str(label_source.resolve()), "rule": label_rule,
                 "metadata_sites": len(labels), "matched_sites": len(evaluated_labels),
                 "unlabeled_prediction_sites": count - len(evaluated_labels),
                 "metadata_sites_without_predictions": len(labels) - len(evaluated_labels),
@@ -222,8 +226,10 @@ def main():
                                help="Label CSV; defaults to adjacent data.info.labelled or data.info")
     label_options.add_argument(
         "--no-labels", action="store_true", help="Disable label discovery/evaluation")
-    parser.add_argument("--n-jobs", type=int, default=1, help="Parallel estimator prediction jobs")
-    parser.add_argument("--threads", type=int, default=1, help="BLAS/OpenMP/PyTorch CPU threads")
+    parser.add_argument("--n-jobs", type=int, default=1,
+                        help="Parallel estimator prediction jobs")
+    parser.add_argument("--threads", type=int, default=1,
+                        help="BLAS/OpenMP/PyTorch CPU threads")
     args = parser.parse_args()
     if args.n_jobs == 0 or args.threads < 1:
         parser.error("--n-jobs must be nonzero and --threads must be positive")
