@@ -13,7 +13,7 @@ uv run --locked python sgnex.py --list
 Download and predict one A549 run using the bundled Extra Trees model.
 
 ```bash
-uv run --locked python sgnex.py --samples SGNex_A549_directRNA_replicate5_run1 --model-dir models/extra_trees_data01 --n-jobs 8 --threads 8
+uv run --locked python sgnex.py --samples SGNex_A549_directRNA_replicate5_run1 --model-dir models/full/extra_trees --n-jobs 8 --threads 8
 ```
 
 Repeat that same command after an interruption. Download byte ranges resume automatically. A completed prediction is skipped only after checking its contract and output checksums. An interrupted prediction restarts that sample; it does not restart completed samples.
@@ -25,13 +25,13 @@ The sample from the earlier manual example can be reused at `data/sgnex/SGNex_A5
 Download and predict all pinned SG-NEx runs, reusing completed samples.
 
 ```bash
-uv run --locked python sgnex.py --model-dir models/extra_trees_data01 --n-jobs 8 --threads 8
+uv run --locked python sgnex.py --model-dir models/full/extra_trees --n-jobs 8 --threads 8
 ```
 
 Alternatively, process only the MCF7 cell line.
 
 ```bash
-uv run --locked python sgnex.py --model-dir models/extra_trees_data01 --cell-lines MCF7 --n-jobs 8 --threads 8
+uv run --locked python sgnex.py --model-dir models/full/extra_trees --cell-lines MCF7 --n-jobs 8 --threads 8
 ```
 
 The manifest `configs/sgnex_samples.json` was captured on 20 October 2026. It contains 23 processed runs across A549, H9, HEYA8, Hct116, HepG2, K562 and MCF7. Feature JSON downloads total approximately 33.37 GB.
@@ -49,7 +49,7 @@ df -h .
 
 ## What to expect
 
-The default output folder is `predictions/sgnex/extra_trees_data01/` (assuming you use the Extra Trees model as above) (or you can specify `--output-dir` to change it) contains:
+The default output folder is `predictions/sgnex/extra_trees/` (assuming you use the Extra Trees model as above) (or you can specify `--output-dir` to change it) contains:
 
 | File                                 | Contents                                                                                                |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
@@ -69,7 +69,7 @@ SG-NEx metadata supplies indexing and coverage, not ground-truth labels. This wo
 You can use any of the bundled models (in `models/`) or a tuned model you export. For example, run the same collection with the bundled MIL (m6Anet) model:
 
 ```bash
-uv run --locked python sgnex.py --samples SGNex_A549_directRNA_replicate5_run1 --model-dir models/mil_data01 --n-jobs 8 --threads 8
+uv run --locked python sgnex.py --samples SGNex_A549_directRNA_replicate5_run1 --model-dir models/full/mil --n-jobs 8 --threads 8
 ```
 
 Refer to [model packaging](../models/README.md) for instructions on exporting a tuned model. Then pass that folder with `--model-dir`. The default output folder uses the model folder's name. Changed model contents, code, library versions, manifest or inference settings require a new `--output-dir`; they cannot be mixed into existing results. `--seed` defaults to 42 and `--eval-iterations` to 5 explicitly for this workflow, including MIL. Inference uses CPU.

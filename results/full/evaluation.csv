@@ -1,0 +1,16 @@
+model,dataset,evaluation,sites,roc_auc,pr_auc
+extra_trees,0,training_set,121838,1.0,1.0
+extra_trees,1,training_set,90810,1.0,1.0
+extra_trees,2,training_set,1323,1.0,1.0
+random_forest,0,training_set,121838,1.0,1.0
+random_forest,1,training_set,90810,1.0,1.0
+random_forest,2,training_set,1323,1.0,1.0
+gradient_boosting,0,training_set,121838,0.9915713797050695,0.792115348963359
+gradient_boosting,1,training_set,90810,0.9882170117250046,0.7986250264048178
+gradient_boosting,2,training_set,1323,0.9841409814954789,0.9453875175803352
+logistic_regression,0,training_set,121838,0.8977377696632453,0.4037655959840262
+logistic_regression,1,training_set,90810,0.8139932095746077,0.33072974404763833
+logistic_regression,2,training_set,1323,0.7706297882664725,0.30570000056564267
+mil,0,training_set,121838,0.9427312805616905,0.5144498637989171
+mil,1,training_set,90810,0.875009101650815,0.41280012356446366
+mil,2,training_set,1323,0.9653425156070657,0.8830795387835707

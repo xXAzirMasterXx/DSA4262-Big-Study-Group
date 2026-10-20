@@ -1,16 +1,19 @@
 {
   "trained_on_datasets": [
     0,
-    1
+    1,
+    2
   ],
   "datasets": {
     "train": [
       0,
-      1
+      1,
+      2
     ],
     "val": [
       0,
-      1
+      1,
+      2
     ],
     "test": [
       0,
@@ -30,12 +33,18 @@
       0.15
     ],
     "2": [
-      0,
-      0,
-      1
+      0.7,
+      0.15,
+      0.15
     ]
   },
   "seed": 42,
-  "best_epoch": 9,
-  "best_validation_value": 0.42267264322567205
+  "best_validation_value": 0.5172550229020679,
+  "model_parameters": {
+    "n_estimators": 500,
+    "max_depth": 40,
+    "min_samples_leaf": 2,
+    "max_features": "sqrt"
+  },
+  "balanced_class_weights": true
 }

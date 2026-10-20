@@ -1,0 +1,36 @@
+{
+  "trained_on_datasets": [
+    0,
+    1,
+    2
+  ],
+  "datasets": {
+    "train": [
+      0,
+      1,
+      2
+    ],
+    "val": [],
+    "test": []
+  },
+  "split_ratios": {
+    "0": [
+      1,
+      0,
+      0
+    ],
+    "1": [
+      1,
+      0,
+      0
+    ],
+    "2": [
+      1,
+      0,
+      0
+    ]
+  },
+  "seed": 42,
+  "best_epoch": 28,
+  "best_validation_value": null
+}

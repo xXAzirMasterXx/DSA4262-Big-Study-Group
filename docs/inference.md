@@ -4,20 +4,20 @@ Follow the root README setup first. Commands target RONIN c8i.2xlarge with `--n-
 
 ## Included models
 
-All are baseline models trained on the combined data0/data1 training partitions. Select the folder using `--model-dir`.
+Each model is provided in `models/full/` (100% training) and `models/split/` (70% training), using data0/data1/data2. The table lists full models; replace `full` with `split` to select a split bundle. Select the folder using `--model-dir`.
 
 | Model                       | Folder                              |
 | --------------------------- | ----------------------------------- |
-| MIL (m6Anet)                | `models/mil_data01`                 |
-| Extra Trees                 | `models/extra_trees_data01`         |
-| Random forest               | `models/random_forest_data01`       |
-| Histogram gradient boosting | `models/gradient_boosting_data01`   |
-| Logistic regression         | `models/logistic_regression_data01` |
+| MIL (m6Anet)                | `models/full/mil`                 |
+| Extra Trees                 | `models/full/extra_trees`         |
+| Random forest               | `models/full/random_forest`       |
+| Histogram gradient boosting | `models/full/gradient_boosting`   |
+| Logistic regression         | `models/full/logistic_regression` |
 
 Evaluate the MIL model on data2.
 
 ```bash
-uv run --locked python predict.py --model-dir models/mil_data01 --input data/data2/dataset2.json --output predictions/mil-data2-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
+uv run --locked python predict.py --model-dir models/full/mil --input data/data2/dataset2.json --output predictions/mil-data2-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
 ```
 
 ## Inputs and outputs
@@ -35,12 +35,10 @@ uv run --locked python predict.py --model-dir models/mil_data01 --input data/dat
 
 See [export and publication](../models/README.md) for packaging other checkpoints.
 
-## Retrained models
+## Evaluation
 
-The retraining workflow exports `models/split/` and `models/full/`, each containing the five model folders. Both modes train on data0/data1/data2. Use the split run's `evaluation.md` for held-out test performance; whole-file inference includes training rows. Full-run metrics are biased training-set evaluations.
+The [split results](../results/split/evaluation.md) evaluate only the held-out 15% of each dataset. These are the unbiased row-level benchmark results, with no transcript/gene grouping. Data2 has 199 test sites, including 29 evaluation positives.
 
-After full-data retraining, predict and evaluate data2 with the exported Extra Trees model.
+The [full results](../results/full/evaluation.md) evaluate the same rows used for training and are biased. Whole-file inference also includes training rows even when using a split bundle; it does not reproduce the held-out table. MIL sampling can differ between training evaluation and standalone inference.
 
-```bash
-uv run --locked python predict.py --model-dir models/full/extra_trees --input data/data2/dataset2.json --output predictions/full-data2-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
-```
+Data0/data1 metrics use modification-positive labels and scores. Data2 metrics use original `label == 0` as positive and `1 - score`. Data2 training labels remain `label > 0`, and saved prediction scores always represent modification probability. PR AUC uses trapezoidal integration of the precision-recall curve.

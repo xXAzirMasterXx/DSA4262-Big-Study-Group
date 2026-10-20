@@ -1,65 +1,19 @@
-# Model folders
+# Model bundles
 
-The five `*_data01` folders contain the completed baseline models trained on the combined data0/data1 training partitions. Each manifest identifies its original run; provenance records dataset selections and splits. Preprocessing/calibration and MIL normalization are included.
+Five models are available in both `split/` and `full/`: Extra Trees, Random Forest, histogram Gradient Boosting, Logistic Regression and MIL. All train on data0/data1/data2 with the parameters in `configs/best/`.
 
-Use `predict.py --model-dir models/extra_trees_data01` (or another model folder) as shown in the root README. Fetch binaries with `git lfs pull` after cloning.
+- `split/`: 70% training, 15% validation, 15% held-out test per dataset.
+- `full/`: 100% training; reported evaluation on training rows is biased.
+- Default inference uses `models/full/extra_trees`. See the [quickstart](../README.md), [metrics](../results/) and [inference details](../docs/inference.md).
 
-## Export a selected checkpoint
+Each folder contains `model.json` (schema, checksum and inference defaults), `provenance.json` (training settings), and `model.joblib` or `model.pt` (weights and preprocessing). Binary files use Git LFS.
 
-Run from the repository root, after selecting a completed run or study. For example:
-
-Run this command from the repository root.
-
-```bash
-uv run --locked python export_model.py --source runs/tuning/extra_trees_data0-1 --output models/extra_trees --description "Selected Extra Trees model"
-```
-
-Replace the source with the actual study directory. A study folder containing `best_trial.json` resolves to its selected trial. A timestamped training run, trial folder, or final evaluation folder containing `best_model.joblib` or `best_model.pt` also works. Export does not fit or evaluate the model. The destination must not already exist.
-
-Each folder contains:
-
-- `model.json`: model type, input schema, checksum, environment versions and inference defaults.
-- `model.joblib` or `model.pt`: fitted estimator with preprocessing, or MIL weights with normalization and architecture settings.
-- `provenance.json`: available training settings and validation information.
-
-Classical artifacts require the saved scikit-learn version; retain the matching repository revision and lockfile. MIL bag sampling uses defaults from the run when available; `--eval-iterations` and `--seed` can set explicit export defaults.
-
-## Publish selected weights
-
-Install [Git LFS](https://git-lfs.com/) first. `.gitattributes` tracks model binaries in these folders through LFS. Large forests exceed [GitHub's regular file size limit](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github).
-
-Run this command from the repository root.
+Download weights after cloning.
 
 ```bash
-git lfs install
+git lfs pull
 ```
 
-Run this command from the repository root.
+Use the locked environment to match the saved scikit-learn version. MIL bundles include architecture and normalization. Only load trusted model files.
 
-```bash
-git add .gitattributes models/
-```
-
-Run this command from the repository root.
-
-```bash
-git lfs status
-```
-
-Run this command from the repository root.
-
-```bash
-git commit -m "feat: add selected pretrained models"
-```
-
-Run this command from the repository root.
-
-```bash
-git push
-```
-
-Before publishing, check the staged files and validate inference with each selected model. Retain a short description of its training datasets and selection criterion. LFS storage and bandwidth must be available on the hosting account. Newcomers run `git lfs pull` after cloning, then pass the chosen folder to `predict.py --model-dir`.
-
-## Selected-parameter bundles
-
-The [retraining commands](../docs/training.md#retrain-selected-parameters) export five models to `models/split/` and `models/full/`. Both include data0/data1/data2 in training. Split bundles use 70% of each dataset; full bundles use 100%. Publish the generated directories through the existing LFS rules. Each run writes an `evaluation.md` table for held-out split or biased full-data evaluation.
+For new weights, follow [selected-parameter retraining](../docs/training.md#retrain-selected-parameters). `export_model.py` can also package a completed run or selected study without training. Its `--source` must identify an existing checkpoint folder and `--output` must be a new folder. Exported weights are covered by the existing LFS rules.

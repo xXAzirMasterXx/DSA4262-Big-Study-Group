@@ -1,14 +1,14 @@
 {
   "format_version": 1,
-  "model": "logistic_regression",
+  "model": "extra_trees",
   "kind": "classical",
-  "description": "logistic_regression baseline trained on the combined data0/data1 training partitions; source runs/lg_data01/20261019_150244_395498",
+  "description": "extra_trees: data0/data1/data2 split training",
   "artifact": "model.joblib",
-  "sha256": "6cfd03e9f8f8b51bd53fcdeb5d78ce567a9f4b9b1ed6a0d64ad0e675ffc124bb",
-  "exported_at_utc": "2026-10-19T12:25:07.599203+00:00",
+  "sha256": "36e2032adad12413e4faae0cb54a60e5bfee664d59680340ba4a777b9abf8bcf",
+  "exported_at_utc": "2026-10-20T16:36:18.519730+00:00",
   "export_environment": {
     "sklearn": "1.9.1",
-    "torch": "2.14.1"
+    "torch": "2.14.1+cu130"
   },
   "input_schema": {
     "numeric_channels": 9,

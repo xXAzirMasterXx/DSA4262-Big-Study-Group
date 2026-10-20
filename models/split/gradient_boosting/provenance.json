@@ -1,16 +1,19 @@
 {
   "trained_on_datasets": [
     0,
-    1
+    1,
+    2
   ],
   "datasets": {
     "train": [
       0,
-      1
+      1,
+      2
     ],
     "val": [
       0,
-      1
+      1,
+      2
     ],
     "test": [
       0,
@@ -30,13 +33,19 @@
       0.15
     ],
     "2": [
-      0,
-      0,
-      1
+      0.7,
+      0.15,
+      0.15
     ]
   },
   "seed": 42,
-  "best_validation_value": 0.5150789678319025,
-  "model_parameters": {},
+  "best_validation_value": 0.5049746680400008,
+  "model_parameters": {
+    "learning_rate": 0.15867829296579417,
+    "max_iter": 500,
+    "max_leaf_nodes": 49,
+    "min_samples_leaf": 88,
+    "l2_regularization": 9.07600493126313
+  },
   "balanced_class_weights": true
 }

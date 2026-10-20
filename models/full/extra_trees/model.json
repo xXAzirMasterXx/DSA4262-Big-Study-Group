@@ -1,14 +1,14 @@
 {
   "format_version": 1,
-  "model": "random_forest",
+  "model": "extra_trees",
   "kind": "classical",
-  "description": "random_forest baseline trained on the combined data0/data1 training partitions; source runs/rf_data01/20261019_145959_245160",
+  "description": "extra_trees: data0/data1/data2 full training",
   "artifact": "model.joblib",
-  "sha256": "9893c71fc99ec24eb5501a9a514e36aed59462b5e23871ed915328036394526b",
-  "exported_at_utc": "2026-10-19T12:25:07.534392+00:00",
+  "sha256": "d3cb1d532ba20ce93918ea8c01aeadd68922af108953c28d23537e66896883d6",
+  "exported_at_utc": "2026-10-20T17:26:03.237513+00:00",
   "export_environment": {
     "sklearn": "1.9.1",
-    "torch": "2.14.1"
+    "torch": "2.14.1+cu130"
   },
   "input_schema": {
     "numeric_channels": 9,

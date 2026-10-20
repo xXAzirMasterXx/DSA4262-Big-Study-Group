@@ -1,0 +1,43 @@
+{
+  "trained_on_datasets": [
+    0,
+    1,
+    2
+  ],
+  "datasets": {
+    "train": [
+      0,
+      1,
+      2
+    ],
+    "val": [],
+    "test": []
+  },
+  "split_ratios": {
+    "0": [
+      1,
+      0,
+      0
+    ],
+    "1": [
+      1,
+      0,
+      0
+    ],
+    "2": [
+      1,
+      0,
+      0
+    ]
+  },
+  "seed": 42,
+  "best_validation_value": null,
+  "model_parameters": {
+    "learning_rate": 0.15867829296579417,
+    "max_iter": 500,
+    "max_leaf_nodes": 49,
+    "min_samples_leaf": 88,
+    "l2_regularization": 9.07600493126313
+  },
+  "balanced_class_weights": true
+}

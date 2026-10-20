@@ -185,7 +185,7 @@ def main():
                         help="List selection and download size without downloading")
     parser.add_argument("--data-dir", type=Path, default=Path("data/sgnex"))
     parser.add_argument("--model-dir", type=Path,
-                        default=Path("models/extra_trees_data01"))
+                        default=Path("models/full/extra_trees"))
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--n-jobs", type=int, default=8)
     parser.add_argument("--threads", type=int, default=8)

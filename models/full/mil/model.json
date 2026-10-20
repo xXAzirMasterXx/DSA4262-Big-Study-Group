@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "model": "mil",
+  "kind": "mil",
+  "description": "mil: data0/data1/data2 full training",
+  "artifact": "model.pt",
+  "sha256": "6cf97a9385aba221407a6dd6392fb710d07aa200c449c14ac6555be1e0246610",
+  "exported_at_utc": "2026-10-20T18:22:56.910772+00:00",
+  "export_environment": {
+    "sklearn": "1.9.1",
+    "torch": "2.14.1+cu130"
+  },
+  "input_schema": {
+    "numeric_channels": 9,
+    "sequence_length": 7,
+    "bases": "ACGT"
+  },
+  "inference_defaults": {
+    "eval_iterations": 5,
+    "seed": 42
+  },
+  "parameters": {
+    "n_reads_per_site": 20,
+    "embed_dim": 4,
+    "hidden_dim": 128,
+    "dropout": 0.22709688460911667,
+    "learning_rate": 0.0009128390984705686,
+    "weight_decay": 1.1127649124533707e-06,
+    "batch_size": 256,
+    "epochs": 28,
+    "balanced": true
+  }
+}

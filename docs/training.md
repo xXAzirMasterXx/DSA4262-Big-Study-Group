@@ -9,20 +9,20 @@ Selected parameters and tuning provenance are stored in `configs/best/`. Both mo
 Train on 70% of each dataset, select checkpoints on 15% validation, evaluate on 15% held-out test, and export inference bundles.
 
 ```bash
-uv run --locked python retrain.py --mode split --n-jobs 8 --threads 8 --export-dir models/split
+uv run --locked python retrain.py --mode split --n-jobs 8 --threads 8 --export-dir models/retrained_split
 ```
 
 Train on 100% of each dataset, evaluate on the training rows, and export inference bundles.
 
 ```bash
-uv run --locked python retrain.py --mode full --n-jobs 8 --threads 8 --export-dir models/full
+uv run --locked python retrain.py --mode full --n-jobs 8 --threads 8 --export-dir models/retrained_full
 ```
 
 - Results are saved in timestamped folders under `runs/retrained/split/` and `runs/retrained/full/`. Each includes `evaluation.csv` and `evaluation.md`: per-dataset ROC AUC and PR AUC tables. Model subfolders retain checkpoints, predictions and split assignments.
 - Split scores use held-out test rows. Full scores use training rows and are biased. Row splitting is independent, without transcript/gene grouping.
 - Data2 training labels use `label > 0`. Its per-dataset evaluation treats original `label == 0` as positive and uses `1 - score`. Pooled metrics use modification-positive labels/scores across all datasets.
 - MIL split training allows 30 epochs and selects by pooled validation PR AUC. Full training uses a fixed 28 epochs. Class balancing and training-only normalization remain enabled.
-- Exports are `models/split/<model>` and `models/full/<model>`. Destinations must not already exist. Each command starts fresh fits; `--models` accepts a subset of the five model names.
+- The commands export to `models/retrained_split/<model>` and `models/retrained_full/<model>` to preserve the published bundles in `models/split/` and `models/full/`. Destinations must not already exist. Each command starts fresh fits; `--models` accepts a subset of the five model names.
 - Parameters were selected from the recorded data0/data1 studies. Retraining reuses them without additional tuning. Local analysis reports and training runs are ignored by Git.
 
 ## Train individual models

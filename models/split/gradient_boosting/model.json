@@ -1,14 +1,14 @@
 {
   "format_version": 1,
-  "model": "extra_trees",
+  "model": "gradient_boosting",
   "kind": "classical",
-  "description": "extra_trees baseline trained on the combined data0/data1 training partitions; source runs/et_data01/20261019_145905_843548",
+  "description": "gradient_boosting: data0/data1/data2 split training",
   "artifact": "model.joblib",
-  "sha256": "b414a2a1d6d590b20db68fe3f8aec308d92f3490fdbbc995a26f34b01e633bbe",
-  "exported_at_utc": "2026-10-19T12:25:04.939723+00:00",
+  "sha256": "d3a6b99a4c0f81d5f0881023f0f497ae93b273f3ef0c2d0a424d424f41cfb077",
+  "exported_at_utc": "2026-10-20T16:37:18.353004+00:00",
   "export_environment": {
     "sklearn": "1.9.1",
-    "torch": "2.14.1"
+    "torch": "2.14.1+cu130"
   },
   "input_schema": {
     "numeric_channels": 9,

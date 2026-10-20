@@ -1,0 +1,42 @@
+{
+  "trained_on_datasets": [
+    0,
+    1,
+    2
+  ],
+  "datasets": {
+    "train": [
+      0,
+      1,
+      2
+    ],
+    "val": [],
+    "test": []
+  },
+  "split_ratios": {
+    "0": [
+      1,
+      0,
+      0
+    ],
+    "1": [
+      1,
+      0,
+      0
+    ],
+    "2": [
+      1,
+      0,
+      0
+    ]
+  },
+  "seed": 42,
+  "best_validation_value": null,
+  "model_parameters": {
+    "n_estimators": 300,
+    "max_depth": null,
+    "min_samples_leaf": 1,
+    "max_features": "sqrt"
+  },
+  "balanced_class_weights": true
+}

@@ -2,13 +2,13 @@
   "format_version": 1,
   "model": "gradient_boosting",
   "kind": "classical",
-  "description": "gradient_boosting baseline trained on the combined data0/data1 training partitions; source runs/gb_data01/20261019_150146_817930",
+  "description": "gradient_boosting: data0/data1/data2 full training",
   "artifact": "model.joblib",
-  "sha256": "1211bc2498f6004336be97c658d0d1007c08fd99f74ad6a302b5c41e0c13bee4",
-  "exported_at_utc": "2026-10-19T12:25:07.596353+00:00",
+  "sha256": "c0772de05e464ea6ace613353451b1c63381f65e0eaf07e2af5e6450c9388a55",
+  "exported_at_utc": "2026-10-20T17:27:19.112080+00:00",
   "export_environment": {
     "sklearn": "1.9.1",
-    "torch": "2.14.1"
+    "torch": "2.14.1+cu130"
   },
   "input_schema": {
     "numeric_channels": 9,
