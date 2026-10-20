@@ -8,6 +8,7 @@ import tempfile
 import pandas as pd
 import numpy as np
 import torch
+from threadpoolctl import threadpool_limits
 
 from data_prep import iter_feature_sites
 from evaluation import compute_metrics
@@ -85,7 +86,7 @@ def load_labels(input_path, labels_path=None, no_labels=False):
 
 
 def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
-            seed=None, iterations=None, dataset_name=None, labels_path=None, no_labels=False):
+            seed=None, iterations=None, dataset_name=None, labels_path=None, no_labels=False, n_jobs=None):
     input_path, output_path = Path(input_path), Path(output_path)
     sidecar = output_path.with_suffix(output_path.suffix + ".json")
     if batch_size < 1:
@@ -98,6 +99,12 @@ def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
     labels, label_source = load_labels(input_path, labels_path, no_labels)
     evaluated_labels, evaluated_scores = [], []
     manifest, payload, fitted = load_bundle(model_dir, device)
+    if n_jobs == 0:
+        raise ValueError("n_jobs must be nonzero")
+    if n_jobs is not None and manifest["kind"] == "classical":
+        updates = {key: n_jobs for key in fitted.get_params(deep=True)
+                   if key == "n_jobs" or key.endswith("__n_jobs")}
+        fitted.set_params(**updates)
     seed = manifest["inference_defaults"]["seed"] if seed is None else seed
     iterations = manifest["inference_defaults"]["eval_iterations"] if iterations is None else iterations
     if seed < 0 or iterations < 1:
@@ -171,7 +178,8 @@ def predict(model_dir, input_path, output_path, batch_size=256, device="cpu",
             "model": manifest["model"], "model_sha256": manifest["sha256"],
             "input": str(input_path.resolve()), "input_size": stat.st_size,
             "input_mtime_ns": stat.st_mtime_ns, "sites": count, "dataset": name,
-            "device": device, "batch_size": batch_size,
+            "device": device, "batch_size": batch_size, "n_jobs": n_jobs,
+            "torch_threads": torch.get_num_threads(),
             "seed": seed if manifest["kind"] == "mil" else None,
             "eval_iterations": iterations if manifest["kind"] == "mil" else None,
             "sampling": "per_site_iteration_seed_v1" if manifest["kind"] == "mil" else "all_reads",
@@ -214,9 +222,15 @@ def main():
                                help="Label CSV; defaults to adjacent data.info.labelled or data.info")
     label_options.add_argument(
         "--no-labels", action="store_true", help="Disable label discovery/evaluation")
+    parser.add_argument("--n-jobs", type=int, default=1, help="Parallel estimator prediction jobs")
+    parser.add_argument("--threads", type=int, default=1, help="BLAS/OpenMP/PyTorch CPU threads")
     args = parser.parse_args()
-    count = predict(args.model_dir, args.input, args.output, args.batch_size, args.device,
-                    args.seed, args.eval_iterations, args.dataset_name, args.labels, args.no_labels)
+    if args.n_jobs == 0 or args.threads < 1:
+        parser.error("--n-jobs must be nonzero and --threads must be positive")
+    torch.set_num_threads(args.threads)
+    with threadpool_limits(limits=args.threads):
+        count = predict(args.model_dir, args.input, args.output, args.batch_size, args.device,
+                        args.seed, args.eval_iterations, args.dataset_name, args.labels, args.no_labels, args.n_jobs)
     print(f"Saved {count:,} predictions to {args.output}")
     summary = json.loads(args.output.with_suffix(
         args.output.suffix + ".json").read_text())

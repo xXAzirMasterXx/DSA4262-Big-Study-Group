@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+from threadpoolctl import threadpool_limits
 from torch import nn
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
@@ -353,7 +354,17 @@ def main():
                         dest="no_balanced_sampler", action="store_true")
     parser.add_argument("--device", choices=("auto",
                         "cpu", "cuda"), default="auto")
+    parser.add_argument("--threads", type=int, help="BLAS/OpenMP/PyTorch CPU threads")
     args = parser.parse_args()
+    if args.threads is not None and args.threads < 1:
+        parser.error("--threads must be positive")
+    with threadpool_limits(limits=args.threads):
+        if args.threads is not None:
+            torch.set_num_threads(args.threads)
+        run_training(args, parser)
+
+
+def run_training(args, parser):
     if args.n_jobs == 0:
         parser.error("--n-jobs cannot be zero")
     if args.calibration_folds < 2:
@@ -414,6 +425,7 @@ def main():
         print(
             f"data{number} split summary: {summary[str(number)]}", flush=True)
     run_info = {
+        "n_jobs": args.n_jobs, "threads": args.threads,
         "model": args.model,
         "seed": args.seed,
         "split_ratios": ratios,

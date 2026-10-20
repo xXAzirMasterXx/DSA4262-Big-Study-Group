@@ -2,14 +2,26 @@
 
 Compare a m6Anet-inspired MIL model with Extra Trees, random forest, histogram gradient boosting, logistic regression, and exact RBF SVM. Each predicts a site-level modification probability. Data2 labels are binarized with `label > 0`.
 
+Commands target **Ubuntu RONIN c8i.2xlarge (16 GiB RAM, 8 vCPUs)** after the README setup. `--n-jobs 8` controls forest/calibration jobs; `--threads 8` controls numerical/PyTorch threads.
+
 ## Run
+
+Run this command from the repository root.
 
 ```bash
 uv sync --locked
-# MIL is the default. Repeat with --train-datasets 1 or --train-datasets 0 1.
-uv run python train.py --data-dir data --train-datasets 0 --output-dir runs/mil_data0 --cache-dir runs/cache
-# Choose extra_trees, random_forest, gradient_boosting, logistic_regression, or rbf_svm.
-uv run python train.py --data-dir data --model extra_trees --train-datasets 0 --output-dir runs/et_data0 --cache-dir runs/cache
+```
+
+MIL is the default. Repeat with --train-datasets 1 or --train-datasets 0 1.
+
+```bash
+uv run --locked python train.py --data-dir data --train-datasets 0 --output-dir runs/mil_data0 --cache-dir runs/cache --n-jobs 8 --threads 8
+```
+
+Choose extra_trees, random_forest, gradient_boosting, logistic_regression, or rbf_svm.
+
+```bash
+uv run --locked python train.py --data-dir data --model extra_trees --train-datasets 0 --output-dir runs/et_data0 --cache-dir runs/cache --n-jobs 8 --threads 8
 ```
 
 Files follow `data/dataN/datasetN.json` and `data/dataN/data.info`; data0 uses `data.info.labelled`. Future data3/data4 folders follow the same convention and require binary labels.
@@ -20,12 +32,14 @@ Files follow `data/dataN/datasetN.json` and `data/dataN/data.info`; data0 uses `
 - `--train-datasets` defaults to `0 1`; `--val-datasets` to `0 1`; `--test-datasets` to `0 1 2`. Changing the training selection keeps validation/test rows fixed. Preserve the seed (default 42), inputs, row order, and ratios when comparing models.
 - Data2 always uses 100% test rows and cannot train or select models. Test evaluation follows model selection.
 - All models report BCE, trapezoidal PR AUC, and ROC AUC, pooled and per dataset. Pooled means the datasets selected for that split, so train pooled equals train data0 when training only on data0. Single-class AUCs are null.
-- Change default proportions with `--split-ratios`; override individual datasets with `--dataset-splits splits.json`. Integer counts require rounding; small classes may not support stratification. `--split-only` exports assignments without loading features.
+- Change default proportions with `--split-ratios`; override individual datasets with `--dataset-splits configs/final_splits.json`. Integer counts require rounding; small classes may not support stratification. `--split-only` exports assignments without loading features.
 
-For final training, put `{"0": [1, 0, 0], "1": [1, 0, 0]}` in `splits.json`:
+For final training, use the included `configs/final_splits.json`, which assigns all data0/data1 rows to training:
+
+Run this command from the repository root.
 
 ```bash
-uv run python train.py --data-dir data --model logistic_regression --dataset-splits splits.json --train-datasets 0 1 --val-datasets --test-datasets 2
+uv run --locked python train.py --data-dir data --model logistic_regression --dataset-splits configs/final_splits.json --train-datasets 0 1 --val-datasets --test-datasets 2 --n-jobs 8 --threads 8
 ```
 
 Without validation, MIL saves the final epoch; classical models fit one fixed parameter configuration.
@@ -50,12 +64,22 @@ These summaries use all reads, whereas MIL uses sampled read bags. The site spli
 
 Optuna tunes each model and training source independently, using the same fixed validation rows. Search ranges and default budgets are in `configs/tuning.json`.
 
+Run this command from the repository root.
+
 ```bash
 uv sync --locked --group tuning
-# Tune one model on combined training; repeat the same command to resume.
-uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data01
-# Tune all models on all three training variants, sequentially.
-uv run --locked --group tuning python tune.py --data-dir data
+```
+
+Tune one model on combined training; repeat the same command to resume.
+
+```bash
+uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data01 --n-jobs 8 --threads 8
+```
+
+Tune all models on all three training variants, sequentially.
+
+```bash
+uv run --locked --group tuning python tune.py --data-dir data --n-jobs 8 --threads 8
 ```
 
 The baseline is trial zero. Budgets default to 30 trials for forests, boosting and logistic regression, 10 for SVM, and 15 for MIL. `--trials` sets the total budget per study; `--timeout` stops new trials after a time budget but cannot interrupt an ongoing fit. MIL supports epoch pruning; exact SVM retains training-only calibration.

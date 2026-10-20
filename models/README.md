@@ -8,6 +8,8 @@ Use `predict.py --model-dir models/extra_trees_data01` (or another model folder)
 
 Run from the repository root, after selecting a completed run or study. For example:
 
+Run this command from the repository root.
+
 ```bash
 uv run --locked python export_model.py --source runs/tuning/extra_trees_data0-1 --output models/extra_trees --description "Selected Extra Trees model"
 ```
@@ -26,11 +28,33 @@ Classical artifacts require the saved scikit-learn version; retain the matching 
 
 Install [Git LFS](https://git-lfs.com/) first. `.gitattributes` tracks model binaries in these folders through LFS. Large forests exceed [GitHub's regular file size limit](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github).
 
+Run this command from the repository root.
+
 ```bash
 git lfs install
+```
+
+Run this command from the repository root.
+
+```bash
 git add .gitattributes models/
+```
+
+Run this command from the repository root.
+
+```bash
 git lfs status
+```
+
+Run this command from the repository root.
+
+```bash
 git commit -m "feat: add selected pretrained models"
+```
+
+Run this command from the repository root.
+
+```bash
 git push
 ```
 

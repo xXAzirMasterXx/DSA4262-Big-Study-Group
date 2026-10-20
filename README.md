@@ -1,70 +1,80 @@
-# m6A site classifiers
+# m6A site inference
 
-Compare a m6Anet-inspired MIL model with Extra Trees, random forest, histogram gradient boosting, logistic regression, and RBF SVM. All predict a modification probability per transcript site.
+Use an **Ubuntu Linux RONIN c8i.2xlarge machine (16 GiB RAM, 8 vCPUs)**. Open its terminal and run the commands below in order. Course datasets and six pretrained models are included through Git LFS; no training is required.
 
 ## Setup
 
-Commands assume a **Linux machine**, with Git and curl installed, and run from the repository root. Other operating systems use similar setup. CPU inference is the default.
+Update the package list.
+```bash
+sudo apt-get update
+```
 
-Install [uv using the official instructions](https://docs.astral.sh/uv/getting-started/installation/), then verify it:
+Install Git, Git LFS and curl.
+```bash
+sudo apt-get install -y git git-lfs curl
+```
 
+Enable Git LFS.
+```bash
+git lfs install
+```
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-# Reopen your shell after installation, then:
-uv --version
+```
 
-git clone https://github.com/xXAzirMasterXx/DSA4262-Big-Study-Group.git
+Add uv to the current terminal's PATH.
+```bash
+source "$HOME/.local/bin/env"
+```
+
+Verify uv is available.
+```bash
+uv --version
+```
+
+Clone the repository without downloading large files during checkout.
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/xXAzirMasterXx/DSA4262-Big-Study-Group.git
+```
+
+Enter the repository.
+```bash
 cd DSA4262-Big-Study-Group
+```
+
+Download the extracted course datasets and pretrained weights.
+```bash
+git lfs pull
+```
+
+Install the locked Python environment.
+```bash
 uv sync --locked
 ```
 
-Keep `.python-version` and `uv.lock` unchanged to reproduce the environment. `uv run` uses the project environment without manual activation.
+Data layout: `data/data0/` contains `dataset0.json` and `data.info.labelled`; `data/data1/` and `data/data2/` each contain `dataset1.json` or `dataset2.json` and `data.info`. No decompression is needed.
 
-## Inference without training
+## Predict and evaluate
 
-Six pretrained models are included under `models/`, using the combined data0/data1 training partitions. These are the completed baseline runs, not Optuna winners. Install [Git LFS](https://git-lfs.com/) using its official Linux instructions, then fetch the weights inside the clone:
+These commands use the bundled Extra Trees model. Each prints ROC AUC and PR AUC and saves predictions plus a metrics JSON in `predictions/`. Existing output files are protected from overwriting; the timestamp gives each run a new filename.
 
+Evaluate data0.
 ```bash
-sudo apt install git-lfs
-git-lfs version
-git-lfs pull
+uv run --locked python predict.py --model-dir models/extra_trees_data01 --input data/data0/dataset0.json --output predictions/data0-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
 ```
 
-Put your uncompressed feature JSON at `data/new/dataset.json` (or pass its actual path). No labels or metadata CSV are required. This must contain precomputed read features, not raw sequencing files. See [input format and dataset preparation](docs/data.md).
-
-Choose a model folder:
-
-| Model                       | Folder                              |
-| --------------------------- | ----------------------------------- |
-| MIL                         | `models/mil_data01`                 |
-| Extra Trees                 | `models/extra_trees_data01`         |
-| Random forest               | `models/random_forest_data01`       |
-| Histogram gradient boosting | `models/gradient_boosting_data01`   |
-| Logistic regression         | `models/logistic_regression_data01` |
-| RBF SVM                     | `models/rbf_svm_data01`             |
-
-Run inference:
-
+Evaluate data1.
 ```bash
-uv run --locked python predict.py --model-dir models/extra_trees_data01 --input data/new/dataset.json --output predictions/new.csv
-# Use --model-dir models/mil_data01 for the packaged MIL model.
+uv run --locked python predict.py --model-dir models/extra_trees_data01 --input data/data1/dataset1.json --output predictions/data1-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
 ```
 
-When `data.info.labelled` or `data.info` beside the input contains labels, inference automatically prints ROC AUC and PR AUC and saves them in the companion JSON (`predictions/new.csv.json`). This works with the course datasets:
-
+Evaluate data2.
 ```bash
-uv run --locked python predict.py --model-dir models/extra_trees_data01 --input data/data2/dataset2.json --output predictions/data2.csv
-# For data0/data1, use data/data0/dataset0.json or data/data1/dataset1.json.
-# For custom labels, add --labels /path/to/labels.csv; disable evaluation with --no-labels.
+uv run --locked python predict.py --model-dir models/extra_trees_data01 --input data/data2/dataset2.json --output predictions/data2-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
 ```
 
-Metrics match labels by transcript ID and position, using `label > 0` as the binary target (including data2).
+The models were trained on data0/data1 training partitions, so whole-file data0/data1 metrics include training sites. Data2 is test-only and labels are binarized with `label > 0`.
 
-- Only the model folder and feature JSON are needed. No fitting, labels or training data are required.
-- Output contains dataset name, row ID, transcript ID, position, read count and `score` (modification probability). A companion JSON records model checksum and inference settings. Existing outputs are never overwritten.
-- Classical models reuse saved preprocessing/calibration and all reads. MIL reuses saved normalization and averages sampled read bags; `--seed` and `--eval-iterations` override packaged defaults. Keep input order and settings fixed for repeatability. Its per-site sampling differs from training-time evaluation, so scores can differ from run prediction files.
-- Use only trusted model folders: loading joblib artifacts can execute Python code. Checksums detect changed files, not trustworthiness.
-
-For training, hyperparameter tuning, custom splits and model export, see the [training guide](docs/training.md).
-
-For custom evaluation labels, see the [labels.csv format and example](docs/data.md#custom-inference-labels).
+Optional: [other pretrained models and inference details](docs/inference.md), [custom input and label formats](docs/data.md), [training and tuning](docs/training.md).

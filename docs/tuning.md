@@ -4,22 +4,38 @@
 
 ## Launch and resume
 
+Run this command from the repository root.
+
 ```bash
 uv sync --locked --group tuning
-# One model, one training source
-uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data0
-# All six models on data0, data1 and combined, sequentially
-uv run --locked --group tuning python tune.py --data-dir data
-# A chosen subset
-uv run --locked --group tuning python tune.py --data-dir data --models random_forest gradient_boosting --variants data0 data1 data01
+```
+
+One model, one training source
+
+```bash
+uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data0 --n-jobs 8 --threads 8
+```
+
+All six models on data0, data1 and combined, sequentially
+
+```bash
+uv run --locked --group tuning python tune.py --data-dir data --n-jobs 8 --threads 8
+```
+
+A chosen subset
+
+```bash
+uv run --locked --group tuning python tune.py --data-dir data --models random_forest gradient_boosting --variants data0 data1 data01 --n-jobs 8 --threads 8
 ```
 
 Default storage is `runs/tuning/<model>_data<IDs>/`. For combined training the suffix is `data0-1`. Each directory contains a separate SQLite database and allows only one active writer. Stop with Ctrl+C and repeat the same command to resume completed work. A model fit interrupted before completion restarts as a new trial; it does not resume halfway through training.
 
 `--trials` is the **total attempted trial budget per study**, including baseline, complete, pruned and failed trials. Repeating a completed budget performs no new trials. Increase the budget to continue searching:
 
+Run this command from the repository root.
+
 ```bash
-uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data0 --trials 50
+uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data0 --trials 50 --n-jobs 8 --threads 8
 ```
 
 `--timeout 3600` sets a time budget per study per invocation. It stops launching additional trials, but an ongoing fit may exceed it. Final test evaluation is also outside this budget. SVM trials use the exact kernel and training-only calibration without subsampling, and can be slow.
@@ -67,9 +83,18 @@ A saved final evaluation is reused when the winner and data fingerprints match. 
 
 ## Local dashboard and checks
 
+Run this command from the repository root.
+
 ```bash
 uv run --locked --group tuning optuna-dashboard sqlite:///runs/tuning/extra_trees_data0/study.db
+```
+
+Run this command from the repository root.
+
+```bash
 uv run --locked --group tuning python -m unittest discover -s tests
 ```
 
 The dashboard reads a chosen study database locally. Tests use temporary synthetic datasets; they cover model baselines, split identity, training-only trial inputs, parameter sampling, pruning, resumption, incompatible-study rejection and winner exports.
+
+The documented commands use `--n-jobs 8 --threads 8` for RONIN c8i.2xlarge. Existing studies started with other settings or older source hashes must retain their original checkout to resume, or use a fresh output directory. Changes to `train.py` for its thread option also change the tuning compatibility contract. Already-running processes retain their loaded code.

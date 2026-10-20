@@ -8,8 +8,20 @@
 /runs/
 /cache/
 
-# Provided datasets and extracted feature JSON files
-/data/
+# Keep custom data private; include only the six course files
+/data/*
+!/data/data0/
+!/data/data1/
+!/data/data2/
+/data/data0/*
+/data/data1/*
+/data/data2/*
+!/data/data0/dataset0.json
+!/data/data0/data.info.labelled
+!/data/data1/dataset1.json
+!/data/data1/data.info
+!/data/data2/dataset2.json
+!/data/data2/data.info
 
 # Generated inference outputs
 /predictions/
