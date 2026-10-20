@@ -25,3 +25,6 @@
 
 # Generated inference outputs
 /predictions/
+
+# Local experiment analysis
+/reports/

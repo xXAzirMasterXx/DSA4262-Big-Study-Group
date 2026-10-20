@@ -321,7 +321,7 @@ def main():
     parser.add_argument("--model", choices=("mil", "extra_trees", "random_forest",
                         "gradient_boosting", "logistic_regression", "rbf_svm"), default="mil")
     parser.add_argument("--model-params", type=Path,
-                        help="Classical estimator parameters: JSON object or list of candidate objects")
+                        help="Estimator parameters: JSON object (or classical candidate list)")
     parser.add_argument("--n-jobs", type=int, default=-1,
                         help="Parallel jobs for forests and SVM calibration")
     parser.add_argument("--calibration-folds", type=int, default=3)
@@ -370,8 +370,23 @@ def run_training(args, parser):
         parser.error("--n-jobs cannot be zero")
     if args.calibration_folds < 2:
         parser.error("--calibration-folds must be at least two")
+    mil_overrides = {}
     if args.model == "mil" and args.model_params:
-        parser.error("--model-params is for classical models")
+        mil_overrides = json.loads(args.model_params.read_text())
+        allowed = {"embed_dim", "hidden_dim",
+                   "dropout", "learning_rate", "weight_decay"}
+        if not isinstance(mil_overrides, dict) or set(mil_overrides) - allowed:
+            parser.error(
+                "MIL parameters must be an object containing only " + ", ".join(sorted(allowed)))
+        for key, value in mil_overrides.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
+                parser.error(f"Invalid MIL parameter: {key}")
+            if key in ("embed_dim", "hidden_dim") and (not isinstance(value, int) or value < 1):
+                parser.error(f"{key} must be a positive integer")
+            if key == "dropout" and not 0 <= value < 1:
+                parser.error("dropout must be in [0, 1)")
+            if key == "learning_rate" and value <= 0 or key == "weight_decay" and value < 0:
+                parser.error(f"Invalid MIL parameter: {key}")
     for name in (
         "epochs",
         "eval_iterations",
@@ -482,6 +497,7 @@ def run_training(args, parser):
         "batch_size": args.batch_size,
         "epochs": args.epochs,
         "balanced": not args.no_balanced_sampler,
+        **mil_overrides,
     }
     model, best_epoch, best_value = train_baseline_model(
         partitions,

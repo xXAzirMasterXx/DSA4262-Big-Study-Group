@@ -1,0 +1,33 @@
+{
+  "source": "runs/tuning_c8i.2xlarge",
+  "selection_metric": "pooled data0/data1 validation PR AUC",
+  "seed": 42,
+  "mil_split_epochs": 30,
+  "mil_full_epochs": 28,
+  "models": {
+    "rbf_svm": {
+      "trial": 0,
+      "validation_pr_auc": 0.41675042417568187
+    },
+    "mil": {
+      "trial": 9,
+      "validation_pr_auc": 0.4326728717177973
+    },
+    "gradient_boosting": {
+      "trial": 20,
+      "validation_pr_auc": 0.4519090732901795
+    },
+    "logistic_regression": {
+      "trial": 15,
+      "validation_pr_auc": 0.36752352011728634
+    },
+    "random_forest": {
+      "trial": 29,
+      "validation_pr_auc": 0.4693428838850049
+    },
+    "extra_trees": {
+      "trial": 0,
+      "validation_pr_auc": 0.518091623153656
+    }
+  }
+}

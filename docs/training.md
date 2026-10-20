@@ -92,3 +92,25 @@ Run all checks with `uv run --locked --group tuning python -m unittest discover 
 ## Export models for inference
 
 See [model export and publication](../models/README.md) to package a completed run or Optuna winner with its preprocessing and provenance. The bundled `*_data01` models are baseline checkpoints; tuning does not replace them automatically.
+
+## Retrain the selected parameters
+
+The six selected parameter files are stored in `configs/best/`, with trial provenance in `selection.json`. Original tuning studies and Optuna are not required. Both commands run all six models sequentially, including the baseline-winning SVM, with seed 42 and training-only preprocessing/calibration.
+
+Retrain on 70% of data0/data1, select MIL checkpoints using the fixed 15% validation sets, and evaluate on 15% data0, 15% data1 and all data2.
+
+```bash
+uv run --locked python retrain.py --mode split --n-jobs 8 --threads 8
+```
+
+Retrain on all data0/data1, then evaluate on all data0, data1 and data2.
+
+```bash
+uv run --locked python retrain.py --mode full --n-jobs 8 --threads 8
+```
+
+- The full-data run labels data0/data1 results **training_set**: those rows were used for fitting, so these scores are not estimates of unseen-data performance. Data2 remains **held_out_test** in both modes and never selects a checkpoint.
+- MIL uses the selected architecture and optimizer parameters. Split mode allows 30 epochs and selects by validation PR AUC. Full mode uses a fixed 28 epochs, the winning tuning trial's best epoch, without validation or test-based selection.
+- Results are saved under `runs/retrained/split/` or `runs/retrained/full/`, in a timestamped folder. `evaluation.csv` contains per-model, per-dataset ROC AUC and PR AUC. Model subfolders retain checkpoints, predictions, split assignments and full metrics.
+- Each invocation starts fresh fits. Completed model outputs remain if interrupted, but the runner does not resume training. Use `--models` followed by model names to run only selected models. Existing bundled models are not overwritten.
+- Tuning already used the validation sets, so this is a refit of selected configurations, not a new independent validation experiment. Local tuning reports are excluded from Git.
