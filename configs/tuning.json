@@ -136,37 +136,13 @@
         }
       }
     },
-    "rbf_svm": {
-      "trials": 10,
-      "baseline": {
-        "C": 1.0,
-        "gamma": "scale"
-      },
-      "space": {
-        "C": {
-          "type": "float",
-          "low": 0.01,
-          "high": 100.0,
-          "log": true
-        },
-        "gamma": {
-          "type": "float_or",
-          "choices": [
-            "scale"
-          ],
-          "low": 0.0001,
-          "high": 1.0,
-          "log": true
-        }
-      }
-    },
     "mil": {
       "trials": 15,
       "baseline_epochs": 10,
       "max_epochs": 30,
       "baseline": {
         "learning_rate": 0.001,
-        "weight_decay": 0.00001,
+        "weight_decay": 1e-05,
         "hidden_dim": 150,
         "embed_dim": 2,
         "dropout": 0.1
@@ -183,7 +159,7 @@
           "choices": [
             0.0
           ],
-          "low": 0.000001,
+          "low": 1e-06,
           "high": 0.001,
           "log": true
         },

@@ -23,7 +23,7 @@ def load_partitions(args, numbers):
         sites = pd.read_csv(prepared[number][0], dtype={"transcript_id": str})
         tables[number] = split_sites(
             normalize_labels(sites, number), seed=args.split_seed + number,
-            ratios=(0, 0, 1) if number == 2 else args.split_ratios,
+            ratios=args.split_ratios,
         )
         tables[number]["dataset"] = number
         tables[number]["row_id"] = np.arange(len(sites))
@@ -71,9 +71,6 @@ def prepare_tuning_data(args, model, train_numbers):
     for split, sites in partitions.items():
         if sites.empty or sites.label.nunique() != 2:
             raise ValueError(f"Tuning requires both binary classes in {split}")
-    if model == "rbf_svm" and partitions["train"].label.value_counts().min() < args.calibration_folds:
-        raise ValueError(
-            "Training classes must each contain at least calibration-folds rows")
     data = TuningData(partitions, read_maps)
     if model == "mil":
         data.mean, data.std = feature_statistics(

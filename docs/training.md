@@ -1,116 +1,54 @@
-# m6A site classifiers
+# Training
 
-Compare a m6Anet-inspired MIL model with Extra Trees, random forest, histogram gradient boosting, logistic regression, and exact RBF SVM. Each predicts a site-level modification probability. Data2 labels are binarized with `label > 0`.
+Run on Ubuntu RONIN c8i.2xlarge (16 GiB RAM, 8 vCPUs), from the repository root after the README setup. Five models are supported: Extra Trees, Random Forest, histogram Gradient Boosting, Logistic Regression and MIL.
 
-Commands target **Ubuntu RONIN c8i.2xlarge (16 GiB RAM, 8 vCPUs)** after the README setup. `--n-jobs 8` controls forest/calibration jobs; `--threads 8` controls numerical/PyTorch threads.
+## Retrain selected parameters
 
-## Run
+Selected parameters and tuning provenance are stored in `configs/best/`. Both modes train on data0/data1/data2 using seed 42. Original studies and Optuna are not required.
 
-Run this command from the repository root.
-
-```bash
-uv sync --locked
-```
-
-MIL is the default. Repeat with --train-datasets 1 or --train-datasets 0 1.
+Train on 70% of each dataset, select checkpoints on 15% validation, evaluate on 15% held-out test, and export inference bundles.
 
 ```bash
-uv run --locked python train.py --data-dir data --train-datasets 0 --output-dir runs/mil_data0 --cache-dir runs/cache --n-jobs 8 --threads 8
+uv run --locked python retrain.py --mode split --n-jobs 8 --threads 8 --export-dir models/split
 ```
 
-Choose extra_trees, random_forest, gradient_boosting, logistic_regression, or rbf_svm.
+Train on 100% of each dataset, evaluate on the training rows, and export inference bundles.
 
 ```bash
-uv run --locked python train.py --data-dir data --model extra_trees --train-datasets 0 --output-dir runs/et_data0 --cache-dir runs/cache --n-jobs 8 --threads 8
+uv run --locked python retrain.py --mode full --n-jobs 8 --threads 8 --export-dir models/full
 ```
 
-Files follow `data/dataN/datasetN.json` and `data/dataN/data.info`; data0 uses `data.info.labelled`. Future data3/data4 folders follow the same convention and require binary labels.
+- Results are saved in timestamped folders under `runs/retrained/split/` and `runs/retrained/full/`. Each includes `evaluation.csv` and `evaluation.md`: per-dataset ROC AUC and PR AUC tables. Model subfolders retain checkpoints, predictions and split assignments.
+- Split scores use held-out test rows. Full scores use training rows and are biased. Row splitting is independent, without transcript/gene grouping.
+- Data2 training labels use `label > 0`. Its per-dataset evaluation treats original `label == 0` as positive and uses `1 - score`. Pooled metrics use modification-positive labels/scores across all datasets.
+- MIL split training allows 30 epochs and selects by pooled validation PR AUC. Full training uses a fixed 28 epochs. Class balancing and training-only normalization remain enabled.
+- Exports are `models/split/<model>` and `models/full/<model>`. Destinations must not already exist. Each command starts fresh fits; `--models` accepts a subset of the five model names.
+- Parameters were selected from the recorded data0/data1 studies. Retraining reuses them without additional tuning. Local analysis reports and training runs are ignored by Git.
 
-## Shared splits and evaluation
+## Train individual models
 
-- Independent, stratified 70/15/15 row splits per dataset. Transcript and gene IDs do not constrain splitting; matching sites across datasets remain independent.
-- `--train-datasets` defaults to `0 1`; `--val-datasets` to `0 1`; `--test-datasets` to `0 1 2`. Changing the training selection keeps validation/test rows fixed.
-- Data2 always uses 100% test rows and cannot train or select models. Test evaluation follows model selection.
-- All models report BCE, trapezoidal PR AUC, and ROC AUC, pooled and per dataset. Pooled means the datasets selected for that split, so train pooled equals train data0 when training only on data0. Single-class AUCs are null.
-- Change default proportions with `--split-ratios`; override individual datasets with `--dataset-splits configs/final_splits.json`. Integer counts require rounding; small classes may not support stratification. `--split-only` exports assignments without loading features.
-
-For final training, use the included `configs/final_splits.json`, which assigns all data0 + data1 rows to training, with no validation and all data2 rows to testing:
+Train Extra Trees with the selected parameters on stratified 70/15/15 partitions of all three datasets.
 
 ```bash
-uv run --locked python train.py --data-dir data --model logistic_regression --dataset-splits configs/final_splits.json --train-datasets 0 1 --val-datasets --test-datasets 2 --n-jobs 8 --threads 8
+uv run --locked python train.py --data-dir data --model extra_trees --model-params configs/best/extra_trees.json --cache-dir runs/cache --output-dir runs/extra_trees --n-jobs 8 --threads 8
 ```
 
-Without validation, MIL saves the final epoch; classical models fit one fixed parameter configuration.
+`--train-datasets`, `--val-datasets` and `--test-datasets` default to `0 1 2`. `--split-ratios` controls proportions; `--dataset-splits` accepts a JSON mapping of dataset IDs to ratios. `configs/final_splits.json` assigns every row to training. Use empty `--val-datasets --test-datasets` for full fitting. Data3/data4 can be selected explicitly with the same folder convention.
 
-## Classical models
+Classical models use 65 features: mean/std/25th/75th percentile of nine read channels (36), seven-base A/C/G/T one-hot encoding (28), and `log1p(n_reads)` (1). Logistic Regression scales numeric features using training rows. MIL uses read bags, noisy-OR pooling and training-only normalization.
 
-All use the same **65 features**, computed once over all reads per site and cached:
+## Optional tuning
 
-- 36 numeric summaries: mean, population standard deviation (`ddof=0`), 25th and 75th percentiles (linear interpolation) for each of nine channels.
-- 28 position-specific A/C/G/T one-hot features for the 7-mer. Other bases raise an error.
-- `log1p(n_reads)` using the natural logarithm.
-
-Logistic regression and SVM standardize numeric features using training rows only; one-hot columns pass through. Trees use unscaled features. Balanced class weights default on; `--no-class-weight` disables them (alias of `--no-balanced-sampler`). SVM uses sigmoid calibration from training-only stratified folds (`--calibration-folds 3`), with preprocessing fitted inside each fold and a final base model fitted on all training rows. Calibration uses natural class frequencies.
-
-Defaults: 300 trees for forests, 100 boosting iterations with internal early stopping disabled, L2 logistic regression, and exact RBF SVM. `--n-jobs` controls forest/calibration parallelism. Exact SVM can be slow on these datasets; it never automatically subsamples or substitutes an approximation.
-
-Use `--model-params params.json` for estimator parameters, such as `{"n_estimators": 500, "max_depth": 20}` for a forest. A list of objects runs candidate configurations and selects by pooled validation PR AUC (`--selection-metric loss` or `roc_auc` also supported). A single object fits one configuration. Balancing, seeds, jobs, SVM kernel/probability handling, and internal early stopping are controlled by the runner.
-
-These summaries use all reads, whereas MIL uses sampled read bags. The site splits match, but the representations differ. Feature ablations and ensemble fitting are future experiments; ensemble weights must be learned from held-out or out-of-fold predictions, never test results.
-
-## Hyperparameter tuning
-
-Optuna tunes each model and training source independently, using the same fixed validation rows. Search ranges and default budgets are in `configs/tuning.json`.
-
-Run this command from the repository root.
+Install tuning dependencies.
 
 ```bash
 uv sync --locked --group tuning
 ```
 
-Tune one model on combined training (data0 + data1); repeat the same command to resume.
+Tune the five models on all three datasets.
 
 ```bash
-uv run --locked --group tuning python tune.py --data-dir data --models extra_trees --variants data01 --n-jobs 8 --threads 8
+uv run --locked --group tuning python tune.py --data-dir data --variants data012 --n-jobs 8 --threads 8
 ```
 
-The baseline is trial zero. Budgets default to 30 trials for forests, boosting and logistic regression, 10 for SVM, and 15 for MIL. `--trials` sets the total budget per study; `--timeout` stops new trials after a time budget but cannot interrupt an ongoing fit. MIL supports epoch pruning; exact SVM retains training-only calibration.
-
-Studies save locally under `runs/tuning/`, including a database, trial CSV, best settings and winning model. Tests run only after selecting a winner; use `--no-final-eval` to defer them. Separate split/model/search seeds preserve comparison rows. See [tuning details](tuning.md) for settings, resume behavior, artifacts and the local dashboard.
-
-## MIL and outputs
-
-MIL defaults: 10 epochs, batch size 256, 20 reads per bag, and 5 evaluation iterations. Training-only normalization, balanced sampling, and noisy-OR pooling are used. The checkpoint with the best pooled validation PR AUC is selected.
-
-Each timestamped run saves split assignments, `run_info.json`, `metrics.json`/`.csv`, and per-dataset prediction CSVs. Predictions include `dataset`, source `row_id`, transcript/position, binary label, split, and `score`. Use `(dataset, row_id)` to align identical source datasets for future ensembles. Assignment files include unused partitions; dataset selectors determine actual usage.
-
-- **MIL:** `best_model.pt`, epoch history, and training curves.
-- **Classical:** `best_model.joblib` (estimator including preprocessing/calibration), `feature_names.json`, and `search_history.json`. Logged settings include resolved parameters and the scikit-learn version. Saved classical estimators accept matrices in the documented feature order and expose `predict_proba`.
-
-Run all checks with `uv run --locked --group tuning python -m unittest discover -s tests`.
-
-## Export models for inference
-
-See [model export and publication](../models/README.md) to package a completed run or Optuna winner with its preprocessing and provenance. The bundled `*_data01` models are baseline checkpoints; tuning does not replace them automatically.
-
-## Retrain the selected parameters
-
-The six selected parameter files are stored in `configs/best/`, with trial provenance in `selection.json`. Original tuning studies and Optuna are not required. Both commands run all six models sequentially, including the baseline-winning SVM, with seed 42 and training-only preprocessing/calibration.
-
-Retrain on 70% of data0/data1, select MIL checkpoints using the fixed 15% validation sets, and evaluate on 15% data0, 15% data1 and all data2.
-
-```bash
-uv run --locked python retrain.py --mode split --n-jobs 8 --threads 8
-```
-
-Retrain on all data0/data1, then evaluate on all data0, data1 and data2.
-
-```bash
-uv run --locked python retrain.py --mode full --n-jobs 8 --threads 8
-```
-
-- The full-data run labels data0/data1 results **training_set**: those rows were used for fitting, so these scores are not estimates of unseen-data performance. Data2 remains **held_out_test** in both modes and never selects a checkpoint.
-- MIL uses the selected architecture and optimizer parameters. Split mode allows 30 epochs and selects by validation PR AUC. Full mode uses a fixed 28 epochs, the winning tuning trial's best epoch, without validation or test-based selection.
-- Results are saved under `runs/retrained/split/` or `runs/retrained/full/`, in a timestamped folder. `evaluation.csv` contains per-model, per-dataset ROC AUC and PR AUC. Model subfolders retain checkpoints, predictions, split assignments and full metrics.
-- Each invocation starts fresh fits. Completed model outputs remain if interrupted, but the runner does not resume training. Use `--models` followed by model names to run only selected models. Existing bundled models are not overwritten.
-- Tuning already used the validation sets, so this is a refit of selected configurations, not a new independent validation experiment. Local tuning reports are excluded from Git.
+See [tuning](tuning.md) for budgets and resuming. See [model publication](../models/README.md) for Git LFS export details. Saved models include preprocessing and provenance.

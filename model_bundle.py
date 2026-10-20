@@ -12,7 +12,7 @@ from mil_model import M6ANetInspiredMIL
 from site_features import FEATURE_NAMES
 
 CLASSICAL_MODELS = {"extra_trees", "random_forest",
-                    "gradient_boosting", "logistic_regression", "rbf_svm"}
+                    "gradient_boosting", "logistic_regression"}
 
 
 def file_sha256(path):

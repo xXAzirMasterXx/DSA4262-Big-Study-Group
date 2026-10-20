@@ -319,12 +319,11 @@ def main():
         description="Train MIL or classical site classifiers with shared dataset splits."
     )
     parser.add_argument("--model", choices=("mil", "extra_trees", "random_forest",
-                        "gradient_boosting", "logistic_regression", "rbf_svm"), default="mil")
+                        "gradient_boosting", "logistic_regression"), default="mil")
     parser.add_argument("--model-params", type=Path,
                         help="Estimator parameters: JSON object (or classical candidate list)")
     parser.add_argument("--n-jobs", type=int, default=-1,
-                        help="Parallel jobs for forests and SVM calibration")
-    parser.add_argument("--calibration-folds", type=int, default=3)
+                        help="Parallel jobs for forests")
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument(
         "--output-dir", type=Path, default=Path("runs/baseline")
@@ -334,8 +333,9 @@ def main():
         "--split-ratios", type=float, nargs=3, default=[0.7, 0.15, 0.15]
     )
     parser.add_argument("--train-datasets", type=int,
-                        nargs="+", default=[0, 1])
-    parser.add_argument("--val-datasets", type=int, nargs="*", default=[0, 1])
+                        nargs="+", default=[0, 1, 2])
+    parser.add_argument("--val-datasets", type=int,
+                        nargs="*", default=[0, 1, 2])
     parser.add_argument("--test-datasets", type=int,
                         nargs="*", default=[0, 1, 2])
     parser.add_argument("--dataset-splits", type=Path,
@@ -368,8 +368,6 @@ def main():
 def run_training(args, parser):
     if args.n_jobs == 0:
         parser.error("--n-jobs cannot be zero")
-    if args.calibration_folds < 2:
-        parser.error("--calibration-folds must be at least two")
     mil_overrides = {}
     if args.model == "mil" and args.model_params:
         mil_overrides = json.loads(args.model_params.read_text())
@@ -396,8 +394,6 @@ def run_training(args, parser):
     ):
         if getattr(args, name) < 1:
             parser.error(f"--{name.replace('_', '-')} must be positive")
-    if 2 in args.train_datasets or 2 in args.val_datasets:
-        parser.error("data2 is reserved exclusively for testing")
     selected = {"train": args.train_datasets,
                 "val": args.val_datasets, "test": args.test_datasets}
     numbers = sorted(set(sum(selected.values(), [])))
@@ -407,9 +403,7 @@ def run_training(args, parser):
         parser.error(
             "Dataset splits must be a JSON object mapping dataset numbers to ratios")
     ratios = {n: overrides.get(
-        str(n), [0, 0, 1] if n == 2 else args.split_ratios) for n in numbers}
-    if 2 in ratios and ratios[2] != [0, 0, 1]:
-        parser.error("data2 must use split ratios [0, 0, 1]")
+        str(n), args.split_ratios) for n in numbers}
     for n in numbers:
         try:
             dataset_files(n)
@@ -448,7 +442,7 @@ def run_training(args, parser):
         "datasets": selected,
         "split_summary": summary,
         "trained_on_datasets": args.train_datasets,
-        "data2_used_for_selection": False,
+        "data2_used_for_selection": 2 in args.val_datasets,
         "prior_correction": False,
         "eval_iterations": args.eval_iterations,
         "selection_metric": args.selection_metric if args.val_datasets else None,

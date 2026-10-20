@@ -1,6 +1,6 @@
 # m6A site inference
 
-Use an **Ubuntu Linux RONIN c8i.2xlarge machine (16 GiB RAM, 8 vCPUs)**. Open its terminal and run the commands below in order. Course datasets and six pretrained models are included through Git LFS; no training is required.
+Use an **Ubuntu Linux RONIN c8i.2xlarge machine (16 GiB RAM, 8 vCPUs)**. Open its terminal and run the commands below in order. Course datasets and five pretrained models are included through Git LFS; no training is required.
 
 ## Setup
 
@@ -88,8 +88,10 @@ Evaluate data2.
 uv run --locked python predict.py --model-dir models/extra_trees_data01 --input data/data2/dataset2.json --output predictions/data2-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
 ```
 
-The models were trained on data0/data1 training partitions, so whole-file data0/data1 metrics include training sites. Data2 is test-only and labels are binarized with `label > 0`.
+The models were trained on data0/data1 training partitions, so whole-file data0/data1 metrics include training sites. Data2 training labels use `label > 0`; its per-dataset metrics use original `label == 0` and inverted scores.
 
 Optional: [other pretrained models and inference details](docs/inference.md), [custom input and label formats](docs/data.md), [training and tuning](docs/training.md).
 
 Task 2: [download and predict SG-NEx cell-line datasets](docs/sgnex.md), including instructions and expected outputs.
+
+See [selected-parameter retraining](docs/training.md#retrain-selected-parameters) for all-data training, split/full inference bundles and the two generated metric tables. Whole-file inference includes training rows; use the split run’s table for held-out results.

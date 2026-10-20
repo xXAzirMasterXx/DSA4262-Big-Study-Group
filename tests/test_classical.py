@@ -35,16 +35,15 @@ class FeatureTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             summarize_site(reads, 'AAAAAAN')
 
-    def test_scaler_and_calibration_are_fitted_on_training(self):
+    def test_scaler_is_fitted_on_training(self):
         rng = np.random.default_rng(8)
         x = rng.normal(size=(30, 65))
         y = np.tile([0, 1], 15)
         with threadpool_limits(limits=1):
-            for name in ('logistic_regression', 'rbf_svm'):
+            for name in ('logistic_regression',):
                 model = make_estimator(name, n_jobs=1)
                 model.fit(x, y)
-                pipeline = model if name == 'logistic_regression' else model.calibrated_classifiers_[
-                    0].estimator
+                pipeline = model
                 scaler = pipeline.named_steps['preprocessing'].named_transformers_[
                     'numeric']
                 np.testing.assert_allclose(
@@ -54,9 +53,6 @@ class FeatureTests(unittest.TestCase):
                 np.testing.assert_array_equal(before, scaler.mean_)
                 self.assertTrue(np.isfinite(scores).all())
                 self.assertTrue(((scores >= 0) & (scores <= 1)).all())
-                if name == 'rbf_svm':
-                    self.assertFalse(model.ensemble)
-                    self.assertEqual(model.cv.n_splits, 3)
 
 
 class RunnerTests(unittest.TestCase):
@@ -78,7 +74,7 @@ class RunnerTests(unittest.TestCase):
                 'extra_trees': [{'n_estimators': 4}, {'n_estimators': 5, 'max_depth': 2}],
                 'random_forest': {'n_estimators': 4},
                 'gradient_boosting': {'max_iter': 3, 'min_samples_leaf': 2},
-                'logistic_regression': {}, 'rbf_svm': {},
+                'logistic_regression': {},
             }
             env = {**os.environ, 'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1',
                    'MPLCONFIGDIR': str(root / 'mpl'), 'XDG_CACHE_HOME': str(root / 'cache-home')}
@@ -116,17 +112,18 @@ class RunnerTests(unittest.TestCase):
                 metrics = json.loads((folder / 'metrics.json').read_text())
                 self.assertEqual(
                     metrics['train']['pooled'], metrics['train']['datasets']['0'])
-                self.assertEqual(set(metrics['val']['datasets']), {'0', '1'})
+                self.assertEqual(
+                    set(metrics['val']['datasets']), {'0', '1', '2'})
                 if model != 'mil':
                     saved = joblib.load(folder / 'best_model.joblib')
                     features = np.load(
                         root / 'cache' / 'dataset2' / 'site_features.npy')
                     with threadpool_limits(limits=1):
                         np.testing.assert_allclose(positive_scores(
-                            saved['estimator'], features), predictions.score)
+                            saved['estimator'], features[predictions.row_id]), predictions.score)
             # Reuse the feature cache for full-data training without validation.
             (root /
-             'full.json').write_text(json.dumps({'0': [1, 0, 0], '1': [1, 0, 0]}))
+             'full.json').write_text(json.dumps({'0': [1, 0, 0], '1': [1, 0, 0], '2': [1, 0, 0]}))
             result = subprocess.run([
                 sys.executable, str(
                     ROOT / 'train.py'), '--data-dir', str(root / 'data'),
@@ -134,7 +131,7 @@ class RunnerTests(unittest.TestCase):
                                    'cache'), '--output-dir', str(root / 'full'),
                 '--model', 'logistic_regression', '--dataset-splits', str(
                     root / 'full.json'),
-                '--val-datasets', '--test-datasets', '2',
+                '--val-datasets', '--test-datasets',
             ], env=env, capture_output=True, text=True, timeout=60)
             self.assertEqual(result.returncode, 0,
                              result.stdout + result.stderr)

@@ -1,4 +1,4 @@
-"""Classical classifiers with training-only preprocessing and calibration."""
+"""Classical classifiers with training-only preprocessing."""
 import json
 import time
 
@@ -6,20 +6,17 @@ import joblib
 import numpy as np
 import pandas as pd
 import sklearn
-from sklearn.calibration import CalibratedClassifierCV
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
 
 from evaluation import partition_metrics, print_metrics, export_predictions, metric_records
 from site_features import FEATURE_NAMES, NUMERIC_COLUMNS, prepare_site_features, partition_features
 
 
-def make_estimator(name, seed=42, balanced=True, n_jobs=-1, calibration_folds=3, params=None):
+def make_estimator(name, seed=42, balanced=True, n_jobs=-1, params=None):
     params = dict(params or {})
     # Keep probability output, training-only selection, and balancing under runner control.
     reserved = {"class_weight", "random_state", "n_jobs",
@@ -42,24 +39,14 @@ def make_estimator(name, seed=42, balanced=True, n_jobs=-1, calibration_folds=3,
     elif name == "logistic_regression":
         estimator = LogisticRegression(
             **({"max_iter": 2000, **common, **params}))
-    elif name == "rbf_svm":
-        estimator = SVC(**({"kernel": "rbf", **common, **params}))
     else:
         raise ValueError(f"Unknown classical model: {name}")
-    if name in ("logistic_regression", "rbf_svm"):
+    if name == "logistic_regression":
         preprocessing = ColumnTransformer(
             [("numeric", StandardScaler(), NUMERIC_COLUMNS)], remainder="passthrough"
         )
         estimator = Pipeline(
             [("preprocessing", preprocessing), ("classifier", estimator)])
-    if name == "rbf_svm":
-        # The pipeline is cloned inside each fold so its scaler cannot see held-out rows.
-        # No calibration sample weights: calibrate to the natural training distribution.
-        estimator = CalibratedClassifierCV(
-            estimator, method="sigmoid", ensemble=False, n_jobs=n_jobs,
-            cv=StratifiedKFold(calibration_folds,
-                               shuffle=True, random_state=seed),
-        )
     return estimator
 
 
@@ -85,19 +72,14 @@ def train_classical(args, prepared, tables, partitions, read_maps, run_dir, run_
     counts = np.bincount(labels, minlength=2)
     if np.any(counts == 0):
         raise ValueError("Classical training requires both binary classes")
-    if args.model == "rbf_svm" and counts.min() < args.calibration_folds:
-        raise ValueError(
-            "Each training class must have at least --calibration-folds rows")
     estimators = [make_estimator(args.model, args.seed, not args.no_balanced_sampler,
-                                 args.n_jobs, args.calibration_folds, p) for p in candidates]
+                                 args.n_jobs, p) for p in candidates]
     features = prepare_site_features(prepared, tables, read_maps)
     x_train = partition_features(partitions["train"], features)
     x_val = partition_features(
         partitions["val"], features) if has_validation else None
     best_model, best_value, best_index = None, None, None
     history = []
-    if args.model == "rbf_svm":
-        print("Fitting exact RBF SVM with training-only calibration; no rows are subsampled.", flush=True)
     for index, estimator in enumerate(estimators):
         print(
             f"Fitting {args.model} candidate {index + 1}/{len(estimators)}", flush=True)
@@ -118,7 +100,7 @@ def train_classical(args, prepared, tables, partitions, read_maps, run_dir, run_
         history.append({"candidate": index, "parameters": candidates[index],
                         "fit_and_validation_seconds": time.perf_counter() - started,
                         "selected_as_best": improved, "val": metrics})
-        # Release losing fitted candidates, especially large forests and SVMs.
+        # Release losing fitted candidates, especially large forests.
         estimators[index] = None
         (run_dir / "search_history.json").write_text(json.dumps(history,
                                                                 indent=2, allow_nan=False))
@@ -146,7 +128,6 @@ def train_classical(args, prepared, tables, partitions, read_maps, run_dir, run_
         "resolved_estimator_parameters": {key: value if isinstance(value, (str, int, float, bool, type(None))) else repr(value)
                                           for key, value in best_model.get_params(deep=True).items()},
         "balanced_class_weights": not args.no_balanced_sampler,
-        "calibration": {"method": "sigmoid", "folds": args.calibration_folds, "source": "training_only"} if args.model == "rbf_svm" else None,
         "feature_count": len(FEATURE_NAMES), "sklearn_version": sklearn.__version__,
     })
     (run_dir / "run_info.json").write_text(json.dumps(run_info, indent=2, allow_nan=False))

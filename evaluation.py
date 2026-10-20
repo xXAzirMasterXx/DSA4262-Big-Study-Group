@@ -56,7 +56,8 @@ def partition_metrics(sites, scores):
         evaluator = data2_metrics if number == 2 else compute_metrics
         metrics["datasets"][str(number)] = evaluator(
             sites.loc[mask, "label"].to_numpy(), scores[mask])
-    metrics["pooled"]["auc_target"] = "label > 0 (modification-positive pooling)"
+    if "2" in metrics["datasets"]:
+        metrics["pooled"]["auc_target"] = "label > 0 (modification-positive pooling)"
     return metrics
 
 

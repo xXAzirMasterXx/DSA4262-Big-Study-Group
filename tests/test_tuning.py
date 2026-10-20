@@ -133,7 +133,7 @@ class TuningRunnerTests(unittest.TestCase):
                 ROOT / "tune.py"), "--data-dir", str(self.root / "data"),
             "--cache-dir", str(self.root /
                                "cache"), "--output-dir", str(self.root / "studies"),
-            "--config", str(self.config_path), "--models", model, "--variants", "data0",
+            "--config", str(self.config_path), "--models", model, "--variants", "data0", "--val-datasets", "0", "1",
             "--n-jobs", "1", "--threads", "1", "--eval-iterations", "1",
             "--n-reads-per-site", "2", "--batch-size", "32", *extra,
         ], env=self.env, capture_output=True, text=True, timeout=120)
@@ -186,7 +186,8 @@ class TuningRunnerTests(unittest.TestCase):
                            "dataset2" / "site_features.npy")
         predictions = pd.read_csv(output / "dataset2_test_predictions.csv")
         np.testing.assert_allclose(
-            fitted.predict_proba(features)[:, 1], predictions.score.to_numpy()
+            fitted.predict_proba(features[predictions.row_id])[
+                :, 1], predictions.score.to_numpy()
         )
         # Changing the model seed rejects resume but leaves exported split rows intact.
         result = self.command(model, "--no-final-eval", "--model-seed", "9")

@@ -32,8 +32,8 @@ from tuning_data import prepare_tuning_data, load_partitions, select_partition, 
 
 ROOT = Path(__file__).resolve().parent
 MODELS = ("extra_trees", "random_forest", "gradient_boosting",
-          "logistic_regression", "rbf_svm", "mil")
-VARIANTS = {"data0": [0], "data1": [1], "data01": [0, 1]}
+          "logistic_regression", "mil")
+VARIANTS = {"data0": [0], "data1": [1], "data01": [0, 1], "data012": [0, 1, 2]}
 
 
 def write_json(path, value):
@@ -137,7 +137,7 @@ def study_contract(args, model, train_numbers, config, fingerprint, device):
         "balanced": not args.no_class_weight, "selection_metric": "pr_auc",
         "search": {k: v for k, v in config.items() if k != "trials"},
         "n_reads_per_site": args.n_reads_per_site, "batch_size": args.batch_size,
-        "eval_iterations": args.eval_iterations, "calibration_folds": args.calibration_folds,
+        "eval_iterations": args.eval_iterations,
         "startup_trials": args.startup_trials, "prune_warmup_epochs": args.prune_warmup_epochs,
         "n_jobs": args.n_jobs, "threads": args.threads, "device": str(device),
         "data_fingerprints": fingerprint,
@@ -223,7 +223,7 @@ def make_objective(args, model, config, data, folder, device):
                 trial.set_user_attr("best_epoch", epoch)
             else:
                 fitted = make_estimator(model, args.model_seed, not args.no_class_weight,
-                                        args.n_jobs, args.calibration_folds, params)
+                                        args.n_jobs, params)
                 with warnings.catch_warnings(record=True) as caught:
                     warnings.simplefilter("always")
                     fitted.fit(
@@ -276,7 +276,7 @@ def persist_progress(study, folder):
 
 
 def export_winner(args, model, train_numbers, study, folder, device):
-    """Called only after optimization. This is the first place data2 is prepared."""
+    """Evaluate the selected checkpoint after optimization."""
     best = study.best_trial
     source = folder / "trials" / f"trial_{best.number:05d}"
     output = folder / "final" / f"trial_{best.number:05d}"
@@ -355,7 +355,7 @@ def export_winner(args, model, train_numbers, study, folder, device):
         "best_epoch": best.user_attrs.get("best_epoch"),
         "baseline_parameters": best.user_attrs.get("fit_parameters"),
         "parameters": best.user_attrs["resolved_parameters"],
-        "study_contract": study.user_attrs["contract"], "data2_used_for_selection": False,
+        "study_contract": study.user_attrs["contract"], "data2_used_for_selection": 2 in args.val_datasets,
         "data_fingerprints": fingerprints,
     })
     print(f"Saved selected model and evaluation: {output}", flush=True)
@@ -410,10 +410,11 @@ def parse_args(argv=None):
     parser.add_argument("--models", choices=MODELS,
                         nargs="+", default=list(MODELS))
     parser.add_argument("--variants", choices=tuple(VARIANTS),
-                        nargs="+", default=list(VARIANTS))
+                        nargs="+", default=["data012"])
     parser.add_argument("--train-datasets", type=int, nargs="+",
                         help="Custom training sources instead of --variants")
-    parser.add_argument("--val-datasets", type=int, nargs="+", default=[0, 1])
+    parser.add_argument("--val-datasets", type=int,
+                        nargs="+", default=[0, 1, 2])
     parser.add_argument("--test-datasets", type=int,
                         nargs="*", default=[0, 1, 2])
     parser.add_argument("--split-ratios", type=float,
@@ -429,10 +430,9 @@ def parse_args(argv=None):
     parser.add_argument("--startup-trials", type=int, default=5)
     parser.add_argument("--prune-warmup-epochs", type=int, default=5)
     parser.add_argument("--n-jobs", type=int, default=1,
-                        help="Jobs inside each forest or calibrated SVM")
+                        help="Jobs inside each forest")
     parser.add_argument("--threads", type=int, default=1,
                         help="BLAS/OpenMP/PyTorch CPU threads")
-    parser.add_argument("--calibration-folds", type=int, default=3)
     parser.add_argument("--no-class-weight", action="store_true")
     parser.add_argument("--n-reads-per-site", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=256)
@@ -440,22 +440,22 @@ def parse_args(argv=None):
     parser.add_argument("--device", choices=("auto",
                         "cpu", "cuda"), default="auto")
     parser.add_argument("--no-final-eval", action="store_true",
-                        help="Save study winner without accessing test-only datasets")
+                        help="Save study winner without final test evaluation")
     args = parser.parse_args(argv)
     for key in ("threads", "startup_trials", "prune_warmup_epochs", "n_reads_per_site", "batch_size", "eval_iterations"):
         if getattr(args, key) < 1:
             parser.error(f"{key} must be positive")
-    if args.n_jobs == 0 or args.calibration_folds < 2:
+    if args.n_jobs == 0:
         parser.error(
-            "n-jobs must be nonzero and calibration-folds must be at least two")
+            "n-jobs must be nonzero")
     if args.trials is not None and args.trials < 1:
         parser.error("trials must be positive")
     if args.timeout is not None and (not np.isfinite(args.timeout) or args.timeout <= 0):
         parser.error("timeout must be finite and positive")
     sources = (args.train_datasets or []) + \
         args.val_datasets + args.test_datasets
-    if any(n < 0 for n in sources) or 2 in (args.train_datasets or []) + args.val_datasets:
-        parser.error("Dataset IDs must be nonnegative; data2 is test-only")
+    if any(n < 0 for n in sources):
+        parser.error("Dataset IDs must be nonnegative")
     try:
         validate_ratios(args.split_ratios)
     except ValueError as error:

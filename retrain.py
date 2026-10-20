@@ -9,7 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 MODELS = ('extra_trees', 'random_forest', 'gradient_boosting',
-          'logistic_regression', 'rbf_svm', 'mil')
+          'logistic_regression', 'mil')
 
 
 def training_command(args, model, output):
@@ -18,15 +18,16 @@ def training_command(args, model, output):
                '--cache-dir', str(args.cache_dir), '--output-dir', str(output),
                '--model', model, '--model-params', str(
                    ROOT / f'configs/best/{model}.json'),
-               '--train-datasets', '0', '1', '--seed', str(selection['seed']),
+               '--train-datasets', '0', '1', '2', '--seed', str(
+                   selection['seed']),
                '--n-jobs', str(args.n_jobs), '--threads', str(args.threads),
                '--device', args.device, '--selection-metric', 'pr_auc']
     if args.mode == 'full':
         command += ['--dataset-splits', str(ROOT / 'configs/final_splits.json'),
-                    '--val-datasets', '--test-datasets', '2']
+                    '--val-datasets', '--test-datasets']
     else:
         command += ['--split-ratios', '0.7', '0.15', '0.15',
-                    '--val-datasets', '0', '1', '--test-datasets', '0', '1', '2']
+                    '--val-datasets', '0', '1', '2', '--test-datasets', '0', '1', '2']
     if model == 'mil':
         command += ['--epochs', str(selection[f'mil_{args.mode}_epochs'])]
     return command
@@ -35,12 +36,24 @@ def training_command(args, model, output):
 def evaluation_rows(model, mode, metrics):
     rows = []
     for dataset in ('0', '1', '2'):
-        split = 'train' if mode == 'full' and dataset != '2' else 'test'
+        split = 'train' if mode == 'full' else 'test'
         metric = metrics[split]['datasets'][dataset]
         rows.append(dict(model=model, dataset=dataset,
                          evaluation='training_set' if split == 'train' else 'held_out_test',
                          sites=metric['sites'], roc_auc=metric['roc_auc'], pr_auc=metric['pr_auc']))
     return rows
+
+
+def write_table(path, rows, mode):
+    title = 'Held-out split evaluation' if mode == 'split' else 'Full-data evaluation (biased)'
+    lines = [f'# {title}', '', '| Model | Dataset | Sites | ROC AUC | PR AUC |',
+             '|---|---|---:|---:|---:|']
+    for row in rows:
+        values = ['N/A' if row[k]
+                  is None else f'{row[k]:.4f}' for k in ('roc_auc', 'pr_auc')]
+        lines.append(
+            f"| {row['model']} | data{row['dataset']} | {row['sites']} | {' | '.join(values)} |")
+    path.write_text('\n'.join(lines) + '\n')
 
 
 def main():
@@ -50,6 +63,8 @@ def main():
     parser.add_argument('--cache-dir', type=Path, default=Path('runs/cache'))
     parser.add_argument('--output-dir', type=Path,
                         default=Path('runs/retrained'))
+    parser.add_argument('--export-dir', type=Path,
+                        help='Export fitted inference bundles into new model subfolders')
     parser.add_argument('--models', nargs='+',
                         choices=MODELS, default=list(MODELS))
     parser.add_argument('--n-jobs', type=int, default=8)
@@ -61,6 +76,8 @@ def main():
         parser.error('n-jobs must be nonzero and threads must be positive')
     folder = args.output_dir / args.mode / \
         datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+    if args.export_dir and any((args.export_dir / model).exists() for model in args.models):
+        parser.error('Export folders already exist; choose a new --export-dir')
     folder.mkdir(parents=True)
     rows = []
     for model in dict.fromkeys(args.models):
@@ -72,12 +89,18 @@ def main():
         runs = list(output.glob('*/metrics.json'))
         if len(runs) != 1:
             raise RuntimeError(f'Expected one metrics file in {output}')
+        if args.export_dir:
+            subprocess.run([sys.executable, str(ROOT / 'export_model.py'), '--source', str(runs[0].parent),
+                            '--output', str(args.export_dir /
+                                            model), '--description',
+                            f'{model}: data0/data1/data2 {args.mode} training'], check=True)
         rows.extend(evaluation_rows(model, args.mode,
                     json.loads(runs[0].read_text())))
         with (folder / 'evaluation.csv').open('w', newline='') as stream:
             writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
             writer.writeheader()
             writer.writerows(rows)
+        write_table(folder / 'evaluation.md', rows, args.mode)
         for row in rows[-3:]:
             print(row, flush=True)
     print(
