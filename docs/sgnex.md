@@ -16,19 +16,65 @@ Start with [samples.csv](../predictions/sgnex/extra_trees/samples.csv), which ma
 
 Open [SG-NEx exploration](../notebooks/sgnex_exploration.ipynb) to compare coverage, score distributions, replicate agreement and candidate differences across cell lines. Interactive plots support hovering and site selection; the notebook also exports standalone HTML explorers. It uses the published predictions and does not train models or download raw feature inputs.
 
-After the root README setup, install the optional locked analysis environment on your RONIN machine.
+You will use **two terminal windows**: one connected to RONIN, and one on your own computer. Jupyter runs on RONIN; your browser displays it through the second connection.
+
+### 1. In your RONIN terminal
+
+After the root README setup, run these commands from the repository folder. Install the notebook environment.
 
 ```bash
 uv sync --locked --group analysis
 ```
 
-Start JupyterLab from the repository root.
+Start JupyterLab with the repository as its file-browser root and leave this terminal open. Run this from `DSA4262-Big-Study-Group`, not its `notebooks` subfolder.
 
 ```bash
-uv run --locked --group analysis jupyter lab notebooks/sgnex_exploration.ipynb --no-browser --ip=127.0.0.1 --port=8888
+uv run --locked --group analysis jupyter lab --ServerApp.root_dir="$PWD" --no-browser --ip=127.0.0.1 --port=8888 --ServerApp.port_retries=0
 ```
 
-In your SSH client's port-forwarding settings, forward local port 8888 to `127.0.0.1:8888` on RONIN. Open the localhost URL with the token printed by JupyterLab in your local browser. Keep the SSH connection and Jupyter process running. Select **Kernel → Restart Kernel and Run All Cells**. The notebook uses one file at a time in chunks and does not need `--n-jobs` or `--threads`.
+Jupyter prints a URL beginning with `http://127.0.0.1:8888/` or `http://localhost:8888/` and containing `token=`. Keep it available for step 3. For example, it may look like `http://127.0.0.1:8888/lab?token=example-token-from-your-terminal`. This is an illustrative pattern, not a working URL: copy the complete URL printed by your own Jupyter process.
+
+### 2. Open a second terminal on your own computer
+
+**Do not run this step inside RONIN.** Open Terminal on macOS/Linux, or PowerShell on Windows. This connection lets your browser reach Jupyter without exposing it publicly.
+
+Have the same connection details you normally use to SSH into RONIN ready:
+
+- **SSH destination:** the username and machine address joined by `@`, copied from your usual SSH command or RONIN connection instructions. For example, `ubuntu@rna-project-team.nus.cloud` shows the expected pattern; use your own machine address.
+- **Private-key path:** if your usual SSH command uses `-i`, enter the path to that same key file on your own computer, without surrounding quotes. Examples are `~/.ssh/rna-project-team.pem` on macOS/Linux or `C:\Users\Alex\.ssh\rna-project-team.pem` on Windows. Use your own filename; `~/` is supported by the commands below. Otherwise press Enter to leave it blank. Enter the path, not the contents of the key.
+
+Run **only the command for your computer's operating system**. It asks for these details, so you do not need to edit the command.
+
+On macOS or Linux, create the connection using the prompted SSH details.
+
+```bash
+bash -c 'read -r -p "RONIN SSH destination: " ronin_destination; read -r -p "Full private-key path (Enter if not needed): " ronin_key; case "$ronin_key" in "~/"*) ronin_key="$HOME/${ronin_key#\~/}" ;; esac; key_args=(); if [ -n "$ronin_key" ]; then key_args=(-i "$ronin_key"); fi; ssh "${key_args[@]}" -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:8888:127.0.0.1:8888 "$ronin_destination"'
+```
+
+On Windows PowerShell, create the connection using the prompted SSH details.
+
+```powershell
+$roninDestination = Read-Host "RONIN SSH destination"; $roninKey = Read-Host "Full private-key path (Enter if not needed)"; if ($roninKey.StartsWith("~/") -or $roninKey.StartsWith("~\")) { $roninKey = Join-Path $HOME $roninKey.Substring(2) }; $keyArgs = @(); if ($roninKey) { $keyArgs = @("-i", $roninKey) }; ssh @keyArgs -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:8888:127.0.0.1:8888 $roninDestination
+```
+
+Authenticate as you normally do for SSH. **A blank terminal with no new prompt is expected after connecting.** Leave it open. If an error appears, resolve it before continuing.
+
+### 3. Open the notebook in your browser
+
+- On your own computer, paste the full Jupyter URL from step 1 into your browser, including `token=` and everything after it. Use the localhost URL, not the RONIN machine's public address.
+- The left file browser should show repository folders such as `data`, `docs`, `models`, `notebooks` and `predictions`. Double-click `notebooks`, then `sgnex_exploration.ipynb`. Use the file browser's home/breadcrumb control to return to the repository root.
+- Select **Kernel → Restart Kernel and Run All Cells**. Keep both terminal windows open while it runs.
+- The notebook processes files in chunks and does not need `--n-jobs` or `--threads`.
+
+### If something goes wrong
+
+- **Only the notebook appears in the file browser:** save your work, stop the old Jupyter process with Ctrl+C, return to the repository folder and run the updated launch command in step 1. Open the new URL printed by that process.
+
+- **Browser cannot connect:** check that Jupyter is still running in the RONIN terminal and that the second terminal has no SSH error.
+- **Permission denied / key file not found:** use the same username, address and full key path as your working SSH connection. The key must be accessible on your own computer.
+- **Address already in use:** port 8888 is occupied on the computer reporting the error. If it belongs to an earlier notebook connection you started, close that connection with Ctrl+C, then retry. Do not stop unrelated processes.
+- **Jupyter asks for a token:** copy the value after `token=` from the RONIN terminal, or reopen the complete URL.
+- **Finished:** save the notebook, stop Jupyter with Ctrl+C in the RONIN terminal and follow its shutdown prompt, then press Ctrl+C in the second terminal to close the connection.
 
 Outputs are written to ignored `reports/sgnex_analysis/`: summary CSVs, figures, candidate sites, interactive HTML and generated discussion points. MCF7 transcript identifiers differ between its runs, so the notebook retains MCF7 in distribution summaries but excludes it from matched-site comparisons pending annotation harmonization. Read the caveats in the notebook: coverage and score thresholds are exploratory, missing sites are not negative labels, and score differences are not evidence of statistically significant differential modification. The interactive notebook is a starting point for the Task 2 visualization, not a completed biological analysis.
 
