@@ -96,26 +96,31 @@ Data2 metrics treat original `label == 0` as positive and use `1 - score`; train
 
 ### Unbiased split
 
-| Model | data0 | data1 | data2 |
-|---|---:|---:|---:|
-| Extra Trees | 0.9376 / 0.5739 | 0.8632 / 0.4704 | 0.9462 / 0.7271 |
-| Random Forest | 0.9326 / 0.5282 | 0.8461 / 0.4176 | 0.9318 / 0.6595 |
-| Gradient Boosting | 0.9316 / 0.5226 | 0.8313 / 0.3893 | 0.8826 / 0.5590 |
+| Model               |           data0 |           data1 |           data2 |
+| ------------------- | --------------: | --------------: | --------------: |
+| Extra Trees         | 0.9376 / 0.5739 | 0.8632 / 0.4704 | 0.9462 / 0.7271 |
+| Random Forest       | 0.9326 / 0.5282 | 0.8461 / 0.4176 | 0.9318 / 0.6595 |
+| Gradient Boosting   | 0.9316 / 0.5226 | 0.8313 / 0.3893 | 0.8826 / 0.5590 |
 | Logistic Regression | 0.8992 / 0.4002 | 0.8122 / 0.3098 | 0.6897 / 0.2350 |
-| MIL | 0.9342 / 0.4971 | 0.8393 / 0.3872 | 0.9377 / 0.8501 |
+| MIL                 | 0.9342 / 0.4971 | 0.8393 / 0.3872 | 0.9377 / 0.8501 |
 
 [Full-precision results](results/split/evaluation.csv).
 
 ### Biased full
 
-| Model | data0 | data1 | data2 |
-|---|---:|---:|---:|
-| Extra Trees | 1.0000 / 1.0000 | 1.0000 / 1.0000 | 1.0000 / 1.0000 |
-| Random Forest | 1.0000 / 1.0000 | 1.0000 / 1.0000 | 1.0000 / 1.0000 |
-| Gradient Boosting | 0.9916 / 0.7921 | 0.9882 / 0.7986 | 0.9841 / 0.9454 |
+| Model               |           data0 |           data1 |           data2 |
+| ------------------- | --------------: | --------------: | --------------: |
+| Extra Trees         | 1.0000 / 1.0000 | 1.0000 / 1.0000 | 1.0000 / 1.0000 |
+| Random Forest       | 1.0000 / 1.0000 | 1.0000 / 1.0000 | 1.0000 / 1.0000 |
+| Gradient Boosting   | 0.9916 / 0.7921 | 0.9882 / 0.7986 | 0.9841 / 0.9454 |
 | Logistic Regression | 0.8977 / 0.4038 | 0.8140 / 0.3307 | 0.7706 / 0.3057 |
-| MIL | 0.9427 / 0.5144 | 0.8750 / 0.4128 | 0.9653 / 0.8831 |
+| MIL                 | 0.9427 / 0.5144 | 0.8750 / 0.4128 | 0.9653 / 0.8831 |
 
 [Full-precision results](results/full/evaluation.csv).
 
-Optional: [other models and inference details](docs/inference.md), [custom datasets](docs/data.md), [training and tuning](docs/training.md), [SG-NEx predictions for Task 2](docs/sgnex.md).
+## Optional
+
+- [SG-NEx predictions for Task 2](docs/sgnex.md): explore the included Extra Trees predictions without running inference, or reproduce them from public inputs.
+- [Inference details](docs/inference.md): choose another model and understand prediction files and evaluation metrics.
+- [Custom datasets](docs/data.md): prepare your own feature JSON and optional labels.
+- [Training and tuning](docs/training.md): retrain models or search for different hyperparameters.

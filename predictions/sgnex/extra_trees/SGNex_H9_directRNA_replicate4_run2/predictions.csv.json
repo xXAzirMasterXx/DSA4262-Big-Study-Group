@@ -1,0 +1,16 @@
+{
+  "model": "extra_trees",
+  "model_sha256": "d3cb1d532ba20ce93918ea8c01aeadd68922af108953c28d23537e66896883d6",
+  "input": "/home/ubuntu/DSA4262-Big-Study-Group/data/sgnex/SGNex_H9_directRNA_replicate4_run2/data.json",
+  "input_size": 487776714,
+  "input_mtime_ns": 1792524688834823757,
+  "sites": 886969,
+  "dataset": "SGNex_H9_directRNA_replicate4_run2",
+  "device": "cpu",
+  "batch_size": 256,
+  "n_jobs": 8,
+  "torch_threads": 8,
+  "seed": null,
+  "eval_iterations": null,
+  "sampling": "all_reads"
+}

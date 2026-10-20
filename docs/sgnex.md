@@ -1,6 +1,20 @@
 # SG-NEx prediction workflow (Task 2)
 
-Complete the root README setup first. Use the same Ubuntu RONIN c8i.2xlarge machine with 16 GiB RAM and 8 vCPUs. This optional workflow downloads public data and predicts modifications without training or labels.
+## Explore the included predictions
+
+Predictions for all 23 pinned SG-NEx runs are included in [predictions/sgnex/extra_trees/](../predictions/sgnex/extra_trees/), generated with `models/full/extra_trees`. No raw feature downloads or inference are needed to explore these results. Prediction CSVs use Git LFS; metadata uses ordinary Git. The prediction files occupy approximately 2.39 GB.
+
+The root README setup downloads these files already. For an existing checkout, download just the published predictions after pulling the latest commit.
+
+```bash
+git lfs pull --include="predictions/sgnex/extra_trees/**"
+```
+
+Start with [samples.csv](../predictions/sgnex/extra_trees/samples.csv), which maps each sample to its cell line, replicate, run, site count and relative prediction path. Read one sample at a time for exploration or notebook analysis. The accompanying manifests and completion files preserve model, input and output checksums and inference settings. See [what to expect](#what-to-expect) for the file schema and score interpretation.
+
+## Reproduce predictions (optional)
+
+Complete the root README setup first. Use Ubuntu RONIN c8i.2xlarge with 16 GiB RAM and 8 vCPUs. The commands below download public inputs and write to `predictions/sgnex/reproduced_extra_trees/`, keeping the published results intact.
 
 ## Start with one sample
 
@@ -13,7 +27,7 @@ uv run --locked python sgnex.py --list
 Download and predict one A549 run using the bundled Extra Trees model.
 
 ```bash
-uv run --locked python sgnex.py --samples SGNex_A549_directRNA_replicate5_run1 --model-dir models/full/extra_trees --n-jobs 8 --threads 8
+uv run --locked python sgnex.py --samples SGNex_A549_directRNA_replicate5_run1 --model-dir models/full/extra_trees --output-dir predictions/sgnex/reproduced_extra_trees --n-jobs 8 --threads 8
 ```
 
 Repeat that same command after an interruption. Download byte ranges resume automatically. A completed prediction is skipped only after checking its contract and output checksums. An interrupted prediction restarts that sample; it does not restart completed samples.
@@ -25,19 +39,19 @@ The sample from the earlier manual example can be reused at `data/sgnex/SGNex_A5
 Download and predict all pinned SG-NEx runs, reusing completed samples.
 
 ```bash
-uv run --locked python sgnex.py --model-dir models/full/extra_trees --n-jobs 8 --threads 8
+uv run --locked python sgnex.py --model-dir models/full/extra_trees --output-dir predictions/sgnex/reproduced_extra_trees --n-jobs 8 --threads 8
 ```
 
 Alternatively, process only the MCF7 cell line.
 
 ```bash
-uv run --locked python sgnex.py --model-dir models/full/extra_trees --cell-lines MCF7 --n-jobs 8 --threads 8
+uv run --locked python sgnex.py --model-dir models/full/extra_trees --output-dir predictions/sgnex/reproduced_extra_trees --cell-lines MCF7 --n-jobs 8 --threads 8
 ```
 
 The manifest `configs/sgnex_samples.json` was captured on 20 October 2026. It contains 23 processed runs across A549, H9, HEYA8, Hct116, HepG2, K562 and MCF7. Feature JSON downloads total approximately 33.37 GB.
 
 - Keep sufficient free disk space for downloads, predictions and the Python environment. The downloader checks space for the next JSON plus a 1 GiB reserve, but this is not a guarantee that the entire collection fits. Inspect space before the full run.
-- Raw downloads remain in `data/sgnex/`; predictions remain in `predictions/sgnex/`. Both are ignored by Git. Do not put this collection in Git LFS.
+- Raw downloads in `data/sgnex/` and newly reproduced predictions are ignored by Git. Only the published Extra Trees predictions and their metadata are tracked; raw feature inputs are not included.
 - Public HTTPS downloads need no AWS credentials or AWS CLI. `curl` is installed by the README setup.
 - Do not run two workflows against the same data/output directories simultaneously. The script takes exclusive locks.
 
@@ -49,7 +63,7 @@ df -h .
 
 ## What to expect
 
-The default output folder is `predictions/sgnex/extra_trees/` (assuming you use the Extra Trees model as above) (or you can specify `--output-dir` to change it) contains:
+The published folder `predictions/sgnex/extra_trees/` and newly generated output folders have the same layout:
 
 | File                                 | Contents                                                                                                |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |

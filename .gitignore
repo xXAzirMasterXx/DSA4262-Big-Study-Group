@@ -24,7 +24,19 @@
 !/data/data2/data.info
 
 # Generated inference outputs
-/predictions/
+/predictions/*
+!/predictions/sgnex/
+/predictions/sgnex/*
+!/predictions/sgnex/extra_trees/
+/predictions/sgnex/extra_trees/*
+!/predictions/sgnex/extra_trees/samples.csv
+!/predictions/sgnex/extra_trees/sample_manifest.json
+!/predictions/sgnex/extra_trees/run_contract.json
+!/predictions/sgnex/extra_trees/SGNex_*/
+/predictions/sgnex/extra_trees/SGNex_*/*
+!/predictions/sgnex/extra_trees/SGNex_*/predictions.csv
+!/predictions/sgnex/extra_trees/SGNex_*/predictions.csv.json
+!/predictions/sgnex/extra_trees/SGNex_*/complete.json
 
 # Local experiment analysis
 /reports/

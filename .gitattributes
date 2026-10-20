@@ -6,3 +6,5 @@ data/data1/dataset1.json filter=lfs diff=lfs merge=lfs -text
 data/data1/data.info filter=lfs diff=lfs merge=lfs -text
 data/data2/dataset2.json filter=lfs diff=lfs merge=lfs -text
 data/data2/data.info filter=lfs diff=lfs merge=lfs -text
+predictions/sgnex/extra_trees/*/predictions.csv filter=lfs diff=lfs merge=lfs -text
+predictions/sgnex/extra_trees/**/*.json -text
