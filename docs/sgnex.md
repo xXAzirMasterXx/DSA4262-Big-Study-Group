@@ -12,6 +12,26 @@ git lfs pull --include="predictions/sgnex/extra_trees/**"
 
 Start with [samples.csv](../predictions/sgnex/extra_trees/samples.csv), which maps each sample to its cell line, replicate, run, site count and relative prediction path. Read one sample at a time for exploration or notebook analysis. The accompanying manifests and completion files preserve model, input and output checksums and inference settings. See [what to expect](#what-to-expect) for the file schema and score interpretation.
 
+## Run the analysis notebook
+
+Open [SG-NEx exploration](../notebooks/sgnex_exploration.ipynb) to compare coverage, score distributions, replicate agreement and candidate differences across cell lines. Interactive plots support hovering and site selection; the notebook also exports standalone HTML explorers. It uses the published predictions and does not train models or download raw feature inputs.
+
+After the root README setup, install the optional locked analysis environment on your RONIN machine.
+
+```bash
+uv sync --locked --group analysis
+```
+
+Start JupyterLab from the repository root.
+
+```bash
+uv run --locked --group analysis jupyter lab notebooks/sgnex_exploration.ipynb --no-browser --ip=127.0.0.1 --port=8888
+```
+
+In your SSH client's port-forwarding settings, forward local port 8888 to `127.0.0.1:8888` on RONIN. Open the localhost URL with the token printed by JupyterLab in your local browser. Keep the SSH connection and Jupyter process running. Select **Kernel → Restart Kernel and Run All Cells**. The notebook uses one file at a time in chunks and does not need `--n-jobs` or `--threads`.
+
+Outputs are written to ignored `reports/sgnex_analysis/`: summary CSVs, figures, candidate sites, interactive HTML and generated discussion points. MCF7 transcript identifiers differ between its runs, so the notebook retains MCF7 in distribution summaries but excludes it from matched-site comparisons pending annotation harmonization. Read the caveats in the notebook: coverage and score thresholds are exploratory, missing sites are not negative labels, and score differences are not evidence of statistically significant differential modification. The interactive notebook is a starting point for the Task 2 visualization, not a completed biological analysis.
+
 ## Reproduce predictions (optional)
 
 Complete the root README setup first. Use Ubuntu RONIN c8i.2xlarge with 16 GiB RAM and 8 vCPUs. The commands below download public inputs and write to `predictions/sgnex/reproduced_extra_trees/`, keeping the published results intact.

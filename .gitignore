@@ -1,6 +1,7 @@
 # macOS and Python
 .DS_Store
 **/__pycache__/
+**/.ipynb_checkpoints/
 *.py[cod]
 
 # Local environment and generated training artifacts
