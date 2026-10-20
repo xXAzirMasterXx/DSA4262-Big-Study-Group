@@ -1,0 +1,237 @@
+{
+  "version": 1,
+  "accessed": "2026-10-20",
+  "source": "https://sg-nex-data.s3.amazonaws.com/?list-type=2&prefix=data/processed_data/m6Anet/",
+  "samples": [
+    {
+      "sample_id": "SGNex_A549_directRNA_replicate5_run1",
+      "cell_line": "A549",
+      "replicate": 5,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_A549_directRNA_replicate5_run1/data.json",
+      "bytes": 810154596,
+      "etag": "456cc08faaa696150f75363fac55b24e",
+      "last_modified": "2022-08-07T13:48:51.000Z"
+    },
+    {
+      "sample_id": "SGNex_A549_directRNA_replicate6_run1",
+      "cell_line": "A549",
+      "replicate": 6,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_A549_directRNA_replicate6_run1/data.json",
+      "bytes": 2017233257,
+      "etag": "371d02208d870231f2c5ba69e1fc950e-241",
+      "last_modified": "2022-08-07T13:49:23.000Z"
+    },
+    {
+      "sample_id": "SGNex_H9_directRNA_replicate2_run1",
+      "cell_line": "H9",
+      "replicate": 2,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_H9_directRNA_replicate2_run1/data.json",
+      "bytes": 1269822063,
+      "etag": "a3096e78fc0a2fb5cbe33621dd29c63d-152",
+      "last_modified": "2025-09-23T05:56:39.000Z"
+    },
+    {
+      "sample_id": "SGNex_H9_directRNA_replicate2_run2",
+      "cell_line": "H9",
+      "replicate": 2,
+      "run": 2,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_H9_directRNA_replicate2_run2/data.json",
+      "bytes": 662827352,
+      "etag": "40b0710da48ce186b9cadff3e76292b9-80",
+      "last_modified": "2025-09-23T05:59:26.000Z"
+    },
+    {
+      "sample_id": "SGNex_H9_directRNA_replicate3_run1",
+      "cell_line": "H9",
+      "replicate": 3,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_H9_directRNA_replicate3_run1/data.json",
+      "bytes": 1120809808,
+      "etag": "3b59eafaa6ceb2397f5af06ccdb08f19-134",
+      "last_modified": "2025-09-23T05:59:39.000Z"
+    },
+    {
+      "sample_id": "SGNex_H9_directRNA_replicate3_run2",
+      "cell_line": "H9",
+      "replicate": 3,
+      "run": 2,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_H9_directRNA_replicate3_run2/data.json",
+      "bytes": 620930528,
+      "etag": "fa4d0e6ee86f6e2c401fc2d98603b0eb-75",
+      "last_modified": "2025-09-23T05:59:54.000Z"
+    },
+    {
+      "sample_id": "SGNex_H9_directRNA_replicate4_run1",
+      "cell_line": "H9",
+      "replicate": 4,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_H9_directRNA_replicate4_run1/data.json",
+      "bytes": 1723323528,
+      "etag": "f09608bfde4bef4c3762e2a8effd1117-206",
+      "last_modified": "2025-09-23T06:00:06.000Z"
+    },
+    {
+      "sample_id": "SGNex_H9_directRNA_replicate4_run2",
+      "cell_line": "H9",
+      "replicate": 4,
+      "run": 2,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_H9_directRNA_replicate4_run2/data.json",
+      "bytes": 487776714,
+      "etag": "1876a8b03886eeaaba63d1ddb10e7c81-59",
+      "last_modified": "2025-09-23T06:00:26.000Z"
+    },
+    {
+      "sample_id": "SGNex_HEYA8_directRNA_replicate1_run1",
+      "cell_line": "HEYA8",
+      "replicate": 1,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_HEYA8_directRNA_replicate1_run1/data.json",
+      "bytes": 1862098560,
+      "etag": "010d4fb28334f969043fea6d8a34f606-222",
+      "last_modified": "2025-09-23T06:00:37.000Z"
+    },
+    {
+      "sample_id": "SGNex_HEYA8_directRNA_replicate1_run2",
+      "cell_line": "HEYA8",
+      "replicate": 1,
+      "run": 2,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_HEYA8_directRNA_replicate1_run2/data.json",
+      "bytes": 563607046,
+      "etag": "d15a0257890dfe81fee75c3e1786629f-68",
+      "last_modified": "2025-09-23T06:00:58.000Z"
+    },
+    {
+      "sample_id": "SGNex_HEYA8_directRNA_replicate2_run1",
+      "cell_line": "HEYA8",
+      "replicate": 2,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_HEYA8_directRNA_replicate2_run1/data.json",
+      "bytes": 1720422521,
+      "etag": "4613f5c5d8acad2ae580a628d6490ecf-206",
+      "last_modified": "2025-09-23T06:01:09.000Z"
+    },
+    {
+      "sample_id": "SGNex_HEYA8_directRNA_replicate2_run2",
+      "cell_line": "HEYA8",
+      "replicate": 2,
+      "run": 2,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_HEYA8_directRNA_replicate2_run2/data.json",
+      "bytes": 1297459552,
+      "etag": "8174ed0644c6e3fb86c7a4847dfa7bc2-155",
+      "last_modified": "2025-09-23T06:01:30.000Z"
+    },
+    {
+      "sample_id": "SGNex_HEYA8_directRNA_replicate3_run1",
+      "cell_line": "HEYA8",
+      "replicate": 3,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_HEYA8_directRNA_replicate3_run1/data.json",
+      "bytes": 2186096111,
+      "etag": "c6a3f4e02e07011bf87bbd2493a8ba4e-261",
+      "last_modified": "2025-09-23T06:01:49.000Z"
+    },
+    {
+      "sample_id": "SGNex_Hct116_directRNA_replicate3_run1",
+      "cell_line": "Hct116",
+      "replicate": 3,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_Hct116_directRNA_replicate3_run1/data.json",
+      "bytes": 1677286910,
+      "etag": "6ac62d5793e8a6aaf58feb3f53a9ef88-200",
+      "last_modified": "2022-08-07T13:49:53.000Z"
+    },
+    {
+      "sample_id": "SGNex_Hct116_directRNA_replicate3_run4",
+      "cell_line": "Hct116",
+      "replicate": 3,
+      "run": 4,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_Hct116_directRNA_replicate3_run4/data.json",
+      "bytes": 1495098391,
+      "etag": "5139e131fea7dcc474b6d770d105a96e-179",
+      "last_modified": "2022-08-07T13:50:22.000Z"
+    },
+    {
+      "sample_id": "SGNex_Hct116_directRNA_replicate4_run3",
+      "cell_line": "Hct116",
+      "replicate": 4,
+      "run": 3,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_Hct116_directRNA_replicate4_run3/data.json",
+      "bytes": 2563691135,
+      "etag": "6b330b408e6f38481cac5fcb21e37b22-306",
+      "last_modified": "2022-08-07T13:51:01.000Z"
+    },
+    {
+      "sample_id": "SGNex_HepG2_directRNA_replicate5_run2",
+      "cell_line": "HepG2",
+      "replicate": 5,
+      "run": 2,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_HepG2_directRNA_replicate5_run2/data.json",
+      "bytes": 2698204367,
+      "etag": "5fb49dd30549696bf29a03753a7ce61f-322",
+      "last_modified": "2022-08-07T13:51:46.000Z"
+    },
+    {
+      "sample_id": "SGNex_HepG2_directRNA_replicate6_run1",
+      "cell_line": "HepG2",
+      "replicate": 6,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_HepG2_directRNA_replicate6_run1/data.json",
+      "bytes": 2567301078,
+      "etag": "dc91951a40efb92f53e67c6288e489b9-307",
+      "last_modified": "2022-08-07T13:52:28.000Z"
+    },
+    {
+      "sample_id": "SGNex_K562_directRNA_replicate4_run1",
+      "cell_line": "K562",
+      "replicate": 4,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_K562_directRNA_replicate4_run1/data.json",
+      "bytes": 1043805797,
+      "etag": "d6e256575587a3102e1f30f7109f8525",
+      "last_modified": "2022-08-07T13:52:53.000Z"
+    },
+    {
+      "sample_id": "SGNex_K562_directRNA_replicate5_run1",
+      "cell_line": "K562",
+      "replicate": 5,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_K562_directRNA_replicate5_run1/data.json",
+      "bytes": 976080316,
+      "etag": "c701f0f77a382b744ddc5a58749fbee8",
+      "last_modified": "2022-08-07T13:53:18.000Z"
+    },
+    {
+      "sample_id": "SGNex_K562_directRNA_replicate6_run1",
+      "cell_line": "K562",
+      "replicate": 6,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_K562_directRNA_replicate6_run1/data.json",
+      "bytes": 1173058268,
+      "etag": "fe24cf7a09d30d052cde51fcba8c4b8c-140",
+      "last_modified": "2022-08-07T13:53:43.000Z"
+    },
+    {
+      "sample_id": "SGNex_MCF7_directRNA_replicate3_run1",
+      "cell_line": "MCF7",
+      "replicate": 3,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_MCF7_directRNA_replicate3_run1/data.json",
+      "bytes": 1252662447,
+      "etag": "ecbd5ceded10c244d4f04823a973f5bd-150",
+      "last_modified": "2022-11-07T00:28:05.000Z"
+    },
+    {
+      "sample_id": "SGNex_MCF7_directRNA_replicate4_run1",
+      "cell_line": "MCF7",
+      "replicate": 4,
+      "run": 1,
+      "url": "https://sg-nex-data.s3.amazonaws.com/data/processed_data/m6Anet/SGNex_MCF7_directRNA_replicate4_run1/data.json",
+      "bytes": 1576072997,
+      "etag": "d735fc0536ba3539f5206d1309cc8d2f-188",
+      "last_modified": "2022-08-07T13:54:35.000Z"
+    }
+  ]
+}

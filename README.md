@@ -91,3 +91,5 @@ uv run --locked python predict.py --model-dir models/extra_trees_data01 --input 
 The models were trained on data0/data1 training partitions, so whole-file data0/data1 metrics include training sites. Data2 is test-only and labels are binarized with `label > 0`.
 
 Optional: [other pretrained models and inference details](docs/inference.md), [custom input and label formats](docs/data.md), [training and tuning](docs/training.md).
+
+Task 2: [download and predict SG-NEx cell-line datasets](docs/sgnex.md), including instructions and expected outputs.
