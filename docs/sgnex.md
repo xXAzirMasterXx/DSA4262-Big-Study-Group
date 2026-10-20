@@ -49,7 +49,7 @@ df -h .
 
 ## What to expect
 
-The default output folder is `predictions/sgnex/extra_trees_data01/` (assuming you use the Extra Trees model as above):
+The default output folder is `predictions/sgnex/extra_trees_data01/` (assuming you use the Extra Trees model as above) (or you can specify `--output-dir` to change it) contains:
 
 | File                                 | Contents                                                                                                |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
