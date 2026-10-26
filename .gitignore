@@ -9,7 +9,7 @@
 /runs/
 /cache/
 
-# Keep custom data private; include only the six course files
+# Keep custom data private; include only the course files
 /data/*
 !/data/data0/
 !/data/data1/
@@ -41,3 +41,23 @@
 
 # Local experiment analysis
 /reports/
+
+# Additional unlabelled course datasets
+!/data/data3/
+/data/data3/*
+!/data/data3/dataset3.json
+!/data/data4/
+/data/data4/*
+!/data/data4/dataset4.json
+!/data/data5/
+/data/data5/*
+!/data/data5/dataset5.json
+!/data/data6/
+/data/data6/*
+!/data/data6/dataset6.json
+!/data/data7/
+/data/data7/*
+!/data/data7/dataset7.json
+
+# Official leaderboard submission and provenance
+!/predictions/leaderboard/
