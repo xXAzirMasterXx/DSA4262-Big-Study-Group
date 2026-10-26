@@ -6,8 +6,8 @@ Follow the root README setup first. Commands target RONIN c8i.2xlarge with `--n-
 
 Each model is provided in `models/full/` (100% training) and `models/split/` (70% training), using data0/data1/data2. The table lists full models; replace `full` with `split` to select a split bundle. Select the folder using `--model-dir`.
 
-| Model                       | Folder                              |
-| --------------------------- | ----------------------------------- |
+| Model                       | Folder                            |
+| --------------------------- | --------------------------------- |
 | MIL (m6Anet)                | `models/full/mil`                 |
 | Extra Trees                 | `models/full/extra_trees`         |
 | Random forest               | `models/full/random_forest`       |
@@ -22,7 +22,7 @@ uv run --locked python predict.py --model-dir models/full/mil --input data/data2
 
 ## Leaderboard submission
 
-Use `submit_predictions.py --team-name "Big Study Group" --output-dir predictions/leaderboard-reproduced` through `uv run --locked python` to generate all eight sample-format CSVs with the full Extra Trees model. The official files are already available in [predictions/leaderboard/](../predictions/leaderboard/). See the [root README](../README.md#leaderboard-predictions) for reproduction and publication steps. Datasets 3 through 7 contain feature JSON only; no label metadata is required.
+Use `submit_predictions.py --team-name "Big Study Group" --output-dir predictions/leaderboard-reproduced` through `uv run --locked python` to generate all eight sample-format CSVs with the full Extra Trees model. The official files are already available in [predictions/leaderboard/](../predictions/leaderboard/). See the [root README](../README.md#leaderboard-predictions) for the reproduction command. Datasets 3 through 7 contain feature JSON only; no label metadata is required.
 
 ## Inputs and outputs
 

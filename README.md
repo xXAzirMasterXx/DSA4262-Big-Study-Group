@@ -64,41 +64,41 @@ Install the locked Python environment.
 uv sync --locked
 ```
 
-Data layout: `data/data0/` contains `dataset0.json` and `data.info.labelled`; `data/data1/` and `data/data2/` contain their feature JSON and `data.info`. The unlabelled final leaderboard datasets are in `data/data3/dataset3.json` through `data/data7/dataset7.json`. All eight datasets are already extracted; no decompression is needed.
+Data layout: `data/data0/` contains `dataset0.json` and `data.info.labelled`; `data/data1/` and `data/data2/` each contain `dataset1.json` or `dataset2.json` and `data.info`. `data/data3/` through `data/data7/` each contain the corresponding unlabelled `datasetN.json`. No decompression is needed.
 
-## Leaderboard predictions
+## Predict and evaluate
 
-The official submission files for **Big Study Group** are in [predictions/leaderboard/](predictions/leaderboard/). Newcomers can inspect or download these CSVs after `git lfs pull` without running inference. Submit exactly these eight CSVs, named `Big Study Group_dataset0.csv` through `Big Study Group_dataset7.csv`. Do not submit the accompanying `manifest.json`.
+These commands use full Extra Trees, our best model on the held-out data0/data1 benchmarks. All course rows were used to train this model, so the metrics below are biased training-set evaluations. Each prints ROC AUC and PR AUC and saves predictions plus a metrics JSON in `predictions/`. Existing output files are protected from overwriting; the timestamp gives each run a new filename.
 
-Each CSV follows [sample_submission.csv](reference/sample_submission.csv) exactly: `transcript_id,transcript_position,score`, with no index or diagnostic columns. Scores are modification probabilities from the **full Extra Trees** model, using all reads. Dataset2 scores are not inverted for submission. The manifest records site counts, input/output checksums, model checksum and inference settings.
-
-### Reproduce all eight files
-
-After completing Setup, run this command from the repository root. It writes to a fresh directory because the official files are already included and protected from overwriting.
-
-```bash
-uv run --locked python submit_predictions.py --team-name "Big Study Group" --output-dir predictions/leaderboard-reproduced --n-jobs 8 --threads 8
-```
-
-The command processes datasets 0 through 7, disables label-based evaluation, checks the sample header, rejects duplicate site keys or invalid scores, and publishes the output directory only after all eight files succeed. To create the official directory in a checkout where it does not yet exist, omit `--output-dir`.
-
-To publish a newly generated official set after reviewing the CSVs and manifest:
-
-```bash
-git add predictions/leaderboard
-git commit -m "feat: publish leaderboard predictions for datasets 0-7"
-git push origin main
-```
-
-## Optional evaluation
-
-The full Extra Trees model was trained on all labelled rows from data0/data1/data2, so evaluations on those datasets are biased training-set evaluations. Datasets 3 through 7 have no labels and cannot be evaluated locally. For example, evaluate data0 and save a diagnostic CSV plus metrics separately:
+Evaluate data0.
 
 ```bash
 uv run --locked python predict.py --model-dir models/full/extra_trees --input data/data0/dataset0.json --output predictions/data0-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
 ```
 
-Use the corresponding paths for data1 or data2. Diagnostic CSVs from `predict.py` contain extra columns and must not be submitted directly. See [inference details](docs/inference.md).
+Evaluate data1.
+
+```bash
+uv run --locked python predict.py --model-dir models/full/extra_trees --input data/data1/dataset1.json --output predictions/data1-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
+```
+
+Evaluate data2.
+
+```bash
+uv run --locked python predict.py --model-dir models/full/extra_trees --input data/data2/dataset2.json --output predictions/data2-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
+```
+
+You can do the same for data3 through data7, but no evaluation metrics will be reported because these datasets have no labels.
+
+## Leaderboard predictions
+
+The eight submission CSVs are already in [predictions/leaderboard/](predictions/leaderboard/); no inference is needed to view them. Submit only `Big Study Group_dataset0.csv` through `Big Study Group_dataset7.csv`.
+
+Generate predictions for all eight datasets with full Extra Trees (our best model) in the submission format. Datasets 3 through 7 have no labels, so no evaluation metrics are reported.
+
+```bash
+uv run --locked python submit_predictions.py --team-name "Big Study Group" --output-dir predictions/leaderboard-$(date +%Y%m%d_%H%M%S) --n-jobs 8 --threads 8
+```
 
 ## Model performance
 
