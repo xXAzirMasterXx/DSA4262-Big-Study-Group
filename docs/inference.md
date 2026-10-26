@@ -20,6 +20,10 @@ Evaluate the MIL model on data2.
 uv run --locked python predict.py --model-dir models/full/mil --input data/data2/dataset2.json --output predictions/mil-data2-$(date +%Y%m%d_%H%M%S).csv --n-jobs 8 --threads 8
 ```
 
+## Leaderboard submission
+
+Use `submit_predictions.py --team-name "Big Study Group" --output-dir predictions/leaderboard-reproduced` through `uv run --locked python` to generate all eight sample-format CSVs with the full Extra Trees model. The official files are already available in [predictions/leaderboard/](../predictions/leaderboard/). See the [root README](../README.md#leaderboard-predictions) for reproduction and publication steps. Datasets 3 through 7 contain feature JSON only; no label metadata is required.
+
 ## Inputs and outputs
 
 - Inference needs only a trusted model folder and precomputed feature JSON. Labels are optional.

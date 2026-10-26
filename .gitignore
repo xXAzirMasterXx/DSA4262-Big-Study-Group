@@ -61,3 +61,6 @@
 
 # Official leaderboard submission and provenance
 !/predictions/leaderboard/
+/predictions/leaderboard/*
+!/predictions/leaderboard/*_dataset[0-7].csv
+!/predictions/leaderboard/manifest.json
